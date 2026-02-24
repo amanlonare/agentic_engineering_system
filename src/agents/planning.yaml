@@ -1,0 +1,9 @@
+name: "planning"
+description: "Researches and designs technical implementation plans. Does not write execution code, but maps out the steps and files required to achieve the user's goal."
+allowed_tools:
+  - "read_file"
+  - "grep_search"
+  - "list_dir"
+forbidden_actions:
+  - "Cannot execute code or run tests"
+  - "Cannot modify production codebases directly"
