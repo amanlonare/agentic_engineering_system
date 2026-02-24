@@ -1,0 +1,19 @@
+[project]
+name = "agentic-engineering-system"
+version = "0.1.0"
+description = "Multi Agent Orchestration for Engineering Workflows"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "langchain-core>=1.2.14",
+    "langchain-openai>=1.1.10",
+    "langchain-chroma>=0.1.2",
+    "langgraph>=1.0.9",
+    "langgraph-checkpoint-sqlite>=2.0.0",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.13.1",
+    "ruff>=0.15.2",
+    "sqlmodel>=0.0.37",
+    "isort>=8.0.0",
+    "black>=26.1.0",
+]
