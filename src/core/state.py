@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from src.schemas import (
     ApprovalStatus,
+    GrowthRecommendation,
     NodeName,
     TechnicalPlan,
     TestReport,
@@ -35,8 +36,14 @@ class EngineeringState(BaseModel):
     task_plan: Optional[TechnicalPlan] = Field(
         default=None, description="Structured plan from Planning node"
     )
+    growth_recommendation: Optional[GrowthRecommendation] = Field(
+        default=None, description="Structured analysis and signal from Growth node"
+    )
 
     # Execution outcomes
+    branch_name: str = Field(
+        default="", description="The git branch name where changes were pushed"
+    )
     code_diffs: str = Field(default="")  # Tracked code changes
     validation_report: Optional[TestReport] = Field(
         default=None, description="Structured report of test runs"
@@ -46,4 +53,10 @@ class EngineeringState(BaseModel):
     approval_status: ApprovalStatus = Field(
         default=ApprovalStatus.PENDING,
         description="State flag: pending, approved, rejected",
+    )
+
+    # Error tracking
+    error_message: Optional[str] = Field(
+        default=None,
+        description="If set, an agent has failed. Supervisor should FINISH.",
     )

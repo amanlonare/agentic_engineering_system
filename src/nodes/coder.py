@@ -9,7 +9,7 @@ from src.core.state import EngineeringState
 from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.utils.logger import configure_logging
 
-logger = configure_logging()
+logger = configure_logging("coder")
 
 
 def coder_node(state: EngineeringState) -> Dict[str, Any]:
@@ -39,14 +39,18 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
     try:
         # In a mock scenario, we identify the repo from the trigger
         repo = state.trigger.repo_name if state.trigger else "unknown"
-        
+
         # Simulate LLM response or tool call outcomes
         content = f"Successfully updated `{repo}` repository. Now testing is required for these changes."
-        
+
         return {
             "messages": [AIMessage(content=content)],
-            "code_diffs": f"Mock implementation for {repo}."
+            "code_diffs": f"Mock implementation for {repo}.",
         }
     except Exception as e:
-        logger.error("❌ Coder Agent failed: %s", str(e))
-        return {"messages": [AIMessage(content=f"Coding failed: {str(e)}")]}
+        error_msg = f"Coder Agent failed: {str(e)}"
+        logger.error("❌ %s", error_msg)
+        return {
+            "messages": [AIMessage(content=error_msg)],
+            "error_message": error_msg,
+        }

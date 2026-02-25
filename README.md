@@ -42,6 +42,7 @@ The system uses **LangGraph** to manage the state machine and agent handoffs:
 - `make lint`: Run code quality checks.
 - `make format`: Auto-format source code.
 - `make ingest`: Ingest codebase context into the long-term memory (ChromaDB).
+- `make reset-db`: Wipe the local SQLite database (`engineering_agents.db`) for a fresh start.
 
 ## 📝 Quick Example
 Here is what a typical end-to-end task looks like in the terminal:

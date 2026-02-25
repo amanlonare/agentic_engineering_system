@@ -20,6 +20,10 @@ class TechnicalPlan(BaseModel):
     title: str = Field(description="A descriptive title for the plan")
     summary: str = Field(description="High-level overview of the proposed solution")
     steps: List[ExecutionStep] = Field(description="Ordered list of execution steps")
+    definition_of_done: List[str] = Field(
+        default_factory=list,
+        description="Checklist of items that must be verified by the Ops agent",
+    )
     estimated_risk: str = Field(
         default="low", description="Risk assessment (low, medium, high)"
     )

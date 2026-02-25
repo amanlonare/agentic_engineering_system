@@ -2,6 +2,10 @@
 Entry point for the Agentic Engineering System.
 """
 
+import uuid
+from datetime import datetime
+from src.core.workspace import WorkspaceManager
+
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.checkpoint.sqlite import SqliteSaver
 
@@ -13,10 +17,6 @@ from src.utils.logger import configure_logging
 
 logger = configure_logging()
 
-
-import uuid
-from datetime import datetime
-from src.core.workspace import WorkspaceManager
 
 def main():
     """Application entry point."""
@@ -34,13 +34,13 @@ def main():
                 user_input = input("\n👤 User Request (or 'exit'): ")
                 if user_input.lower() in ["exit", "quit"]:
                     break
-                
+
                 if not user_input.strip():
                     continue
 
                 # 1. Identify the repository from the query
                 repo = wm.identify_repository(user_input)
-                
+
                 # 2. Create a unique thread ID for this specific task
                 thread_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:4]}"
                 config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
@@ -51,8 +51,8 @@ def main():
                     trigger=TriggerContext(
                         type=TriggerType.MANUAL,
                         payload={"description": user_input},
-                        repo_name=repo
-                    )
+                        repo_name=repo,
+                    ),
                 )
 
                 logger.info("🧵 Thread ID: %s", thread_id)
@@ -64,7 +64,9 @@ def main():
                         logger.info(f"--- Finished node: {node_name} ---")
                         # We log internal status, but in a real CLI we might filter this
                         if "next_action" in node_state:
-                            logger.info(f"Supervisor Decision: {node_state['next_action']}")
+                            logger.info(
+                                f"Supervisor Decision: {node_state['next_action']}"
+                            )
 
                 logger.info("✅ Task Processing Complete.")
 

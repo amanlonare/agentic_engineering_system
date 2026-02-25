@@ -1,4 +1,10 @@
-from src.schemas.enums import ApprovalStatus, NodeName, TriggerType
+from src.schemas.enums import (
+    ApprovalStatus,
+    GrowthRecommendationType,
+    NodeName,
+    TriggerType,
+)
+from src.schemas.growth import GrowthRecommendation
 from src.schemas.plans import ExecutionStep, TechnicalPlan
 from src.schemas.routing import RouteDecision
 from src.schemas.triggers import CloudWatchPayload, GitHubIssuePayload, TriggerContext
@@ -8,6 +14,7 @@ __all__ = [
     "TriggerType",
     "NodeName",
     "ApprovalStatus",
+    "GrowthRecommendationType",
     "GitHubIssuePayload",
     "CloudWatchPayload",
     "TriggerContext",
@@ -16,4 +23,5 @@ __all__ = [
     "TestCaseResult",
     "TestReport",
     "RouteDecision",
+    "GrowthRecommendation",
 ]

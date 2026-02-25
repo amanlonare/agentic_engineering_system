@@ -10,7 +10,7 @@ from src.schemas import TestReport
 from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.utils.logger import configure_logging
 
-logger = configure_logging()
+logger = configure_logging("ops")
 
 
 def ops_node(state: EngineeringState) -> Dict[str, Any]:
@@ -47,13 +47,14 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
             total_tests=5,
             passed_count=5,
             failures=[],
-            logs="End-to-end mock verification successful."
+            logs="End-to-end mock verification successful.",
         )
-        
-        return {
-            "messages": [AIMessage(content=content)],
-            "validation_report": report
-        }
+
+        return {"messages": [AIMessage(content=content)], "validation_report": report}
     except Exception as e:
-        logger.error("❌ Ops Agent failed: %s", str(e))
-        return {"messages": [AIMessage(content=f"Verification failed: {str(e)}")]}
+        error_msg = f"Ops Agent failed: {str(e)}"
+        logger.error("❌ %s", error_msg)
+        return {
+            "messages": [AIMessage(content=error_msg)],
+            "error_message": error_msg,
+        }

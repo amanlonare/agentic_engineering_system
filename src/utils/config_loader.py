@@ -26,8 +26,15 @@ def load_agent_persona(agent_name: str) -> Dict[str, Any]:
 
 def build_system_prompt(persona: Dict[str, Any]) -> str:
     """
-    Constructs a strict system prompt from a persona dictionary.
+    Constructs a system prompt from a persona dictionary.
+    If the persona contains a 'system_prompt' key, it is used verbatim.
+    Otherwise, falls back to auto-constructing from description/tools/forbidden_actions.
     """
+    # Use the full system_prompt if explicitly defined in the YAML
+    if "system_prompt" in persona:
+        return persona["system_prompt"]
+
+    # Legacy fallback: construct from structured fields
     prompt = f"Identity: {persona.get('name', 'Assistant')}\n"
     prompt += f"Role: {persona.get('description', '')}\n\n"
 

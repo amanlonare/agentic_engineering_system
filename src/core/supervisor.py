@@ -15,7 +15,7 @@ from src.providers.chat_models import get_chat_model
 from src.schemas import NodeName, RouteDecision
 from src.utils.logger import configure_logging
 
-logger = configure_logging()
+logger = configure_logging("supervisor")
 
 
 def supervisor_node(state: EngineeringState) -> dict:
@@ -26,6 +26,13 @@ def supervisor_node(state: EngineeringState) -> dict:
     logger.info(
         f"👨‍💼 Supervisor evaluating state triggered by: {state.trigger.type if state.trigger else 'unknown'}"
     )
+
+    # If any agent has set an error_message, stop immediately
+    if state.error_message:
+        logger.error(
+            f"🛑 Agent failure detected. Stopping execution. Reason: {state.error_message}"
+        )
+        return {"next_action": NodeName.FINISH}
 
     llm = get_chat_model()
 
@@ -56,7 +63,10 @@ def supervisor_node(state: EngineeringState) -> dict:
             system_prompt,
             human_prompt,
             MessagesPlaceholder(variable_name="messages"),
-            ("system", "Based on the Reality (Messages) vs the Goal (Plan), who acts next?"),
+            (
+                "system",
+                "Based on the Reality (Messages) vs the Goal (Plan), who acts next?",
+            ),
         ]
     )
 

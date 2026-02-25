@@ -1,4 +1,4 @@
-.PHONY: format lint clean ingest server install init-db run
+.PHONY: format lint clean ingest server install init-db reset-db run
 
 install:
 	uv sync
@@ -16,6 +16,9 @@ ingest:
 
 run:
 	uv run python -m src.main
+
+reset-db:
+	uv run python -m src.scripts.reset_db
 
 test:
 	uv run pytest
