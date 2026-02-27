@@ -22,6 +22,7 @@ def get_chat_model():
         return ChatOpenAI(
             model=settings.OPENAI_MODEL_NAME,
             temperature=0,
+            max_retries=5,
             api_key=settings.OPENAI_API_KEY,  # type: ignore
         )
 

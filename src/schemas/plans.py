@@ -1,6 +1,27 @@
+from datetime import datetime
+from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
+
+
+class StepStatus(str, Enum):
+    """Execution status of a single step."""
+
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class StepExecutionRecord(BaseModel):
+    """A record of a step's execution by an agent."""
+
+    step_id: str
+    status: StepStatus
+    agent: str
+    outcome: str
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
 
 
 class ExecutionStep(BaseModel):

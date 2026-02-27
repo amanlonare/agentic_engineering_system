@@ -4,9 +4,9 @@ install:
 	uv sync
 
 format:
+	uv run ruff check --select I --fix src/
 	uv run ruff format src/
 	uv run ruff check --fix src/
-	uv run isort src/
 
 lint:
 	uv run ruff check src/
@@ -19,6 +19,9 @@ run:
 
 reset-db:
 	uv run python -m src.scripts.reset_db
+
+reset-all:
+	uv run python -m src.scripts.reset_db --all
 
 test:
 	uv run pytest

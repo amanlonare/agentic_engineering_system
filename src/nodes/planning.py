@@ -1,4 +1,3 @@
-import os
 from typing import Any, Dict
 
 from langchain_core.messages import AIMessage
@@ -7,10 +6,9 @@ from langchain_openai import ChatOpenAI
 from src.core.config import settings
 from src.core.state import EngineeringState
 from src.schemas import ApprovalStatus, TechnicalPlan
+from src.tools import read_file
 from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.utils.logger import configure_logging
-
-from src.tools import read_file
 
 logger = configure_logging("planning")
 
@@ -29,19 +27,26 @@ def planning_node(state: EngineeringState) -> Dict[str, Any]:
     system_prompt = build_system_prompt(persona)
 
     # 2. Setup LLM and tools
-    llm = ChatOpenAI(model=settings.OPENAI_MODEL_NAME, temperature=0)
+    llm = ChatOpenAI(model=settings.OPENAI_MODEL_NAME, temperature=0, max_retries=5)
     llm_with_tools = llm.bind_tools([read_file])
     structured_llm = llm.with_structured_output(TechnicalPlan)
 
-    # 3. Build messages
+    # 3. Build messages — ONLY use HumanMessage content for task description
+    #    to avoid picking up Supervisor instruction messages (AIMessage).
+    from langchain_core.messages import HumanMessage
+
     user_messages = [
-        m.content for m in state.messages if hasattr(m, "content") and m.content
+        m.content for m in state.messages if isinstance(m, HumanMessage) and m.content
     ]
-    
+
     if user_messages:
-        task_description = user_messages[-1]
+        task_description = user_messages[
+            0
+        ]  # Use the FIRST human message (original request)
     elif state.trigger and "description" in state.trigger.payload:
-        task_description = state.trigger.payload.get("description", "No task description provided.")
+        task_description = state.trigger.payload.get(
+            "description", "No task description provided."
+        )
         logger.info("ℹ️ Using task description from trigger payload fallback.")
     else:
         task_description = "No task description provided."
@@ -71,7 +76,10 @@ def planning_node(state: EngineeringState) -> Dict[str, Any]:
                         }
                     )
                 else:
-                    logger.warning("⚠️ Planning Agent tried to call unknown tool: %s", tool_call["name"])
+                    logger.warning(
+                        "⚠️ Planning Agent tried to call unknown tool: %s",
+                        tool_call["name"],
+                    )
 
         # Step 2: Final structured output call
         logger.info("📋 Generating structured TechnicalPlan...")

@@ -8,6 +8,7 @@ from src.schemas import (
     ApprovalStatus,
     GrowthRecommendation,
     NodeName,
+    StepExecutionRecord,
     TechnicalPlan,
     TestReport,
     TriggerContext,
@@ -38,7 +39,12 @@ class EngineeringState(BaseModel):
     )
     # Track completed steps from the plan
     completed_step_ids: Annotated[List[str], operator.add] = Field(
-        default_factory=list, description="IDs of steps from the TechnicalPlan that are finished"
+        default_factory=list,
+        description="IDs of steps from the TechnicalPlan that are finished",
+    )
+    # Granular execution history
+    execution_history: Annotated[List["StepExecutionRecord"], operator.add] = Field(
+        default_factory=list, description="Structured log of each agent's actions"
     )
     growth_recommendation: Optional[GrowthRecommendation] = Field(
         default=None, description="Structured analysis and signal from Growth node"

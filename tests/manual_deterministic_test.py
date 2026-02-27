@@ -2,7 +2,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from src.core.state import EngineeringState
 from src.core.supervisor import supervisor_node
-from src.schemas.plans import TechnicalPlan, ExecutionStep
+from src.schemas.plans import TechnicalPlan, ExecutionStep, StepExecutionRecord, StepStatus
 from src.schemas.triggers import TriggerContext
 from src.schemas.enums import TriggerType, ApprovalStatus
 from langchain_core.messages import HumanMessage
@@ -35,6 +35,7 @@ def test_deterministic_routing():
         trigger=TriggerContext(type=TriggerType.MANUAL, payload={"description": "Test"}),
         task_plan=plan,
         completed_step_ids=[],
+        execution_history=[],
         approval_status=ApprovalStatus.APPROVED
     )
     
@@ -50,6 +51,14 @@ def test_deterministic_routing():
         trigger=TriggerContext(type=TriggerType.MANUAL, payload={"description": "Test"}),
         task_plan=plan,
         completed_step_ids=["STEP-1"],
+        execution_history=[
+            StepExecutionRecord(
+                step_id="STEP-1",
+                status=StepStatus.COMPLETED,
+                agent="coder",
+                outcome="Added the LoginButton component with premium styling."
+            )
+        ],
         approval_status=ApprovalStatus.APPROVED
     )
     
@@ -65,6 +74,15 @@ def test_deterministic_routing():
         trigger=TriggerContext(type=TriggerType.MANUAL, payload={"description": "Test"}),
         task_plan=plan,
         completed_step_ids=["STEP-1", "STEP-2"],
+        execution_history=[
+            state_b.execution_history[0],
+            StepExecutionRecord(
+                step_id="STEP-2",
+                status=StepStatus.COMPLETED,
+                agent="ops",
+                outcome="Verified the button click handles events correctly."
+            )
+        ],
         approval_status=ApprovalStatus.APPROVED
     )
     

@@ -2,6 +2,7 @@
 The Chief Orchestrator routing logic. Determines the `next_action` in the workflow.
 """
 
+from langchain_core.messages import AIMessage
 from langchain_core.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
@@ -49,7 +50,8 @@ def supervisor_node(state: EngineeringState) -> dict:
         "### WORKFLOW CONTEXT\n"
         "Current Trigger: {trigger_type}\n"
         "Targeted Repository: {repo_name}\n"
-        "Static Task Plan: {task_plan}\n"
+        "Static Task Plan:\n{task_plan}\n"
+        "NEXT STEP TO EXECUTE: {next_step_directive}\n"
         "Completed Step IDs: {completed_step_ids}\n"
         "Approval Status: {approval_status}\n"
         "Validation Report: {validation_report}\n\n"
@@ -73,21 +75,79 @@ def supervisor_node(state: EngineeringState) -> dict:
     chain = prompt | llm.with_structured_output(RouteDecision)
 
     try:
-        # Prepare structured plan context
-        plan_dict = state.task_plan.model_dump() if state.task_plan else {}
-        
-        logger.info("🔍 Supervisor evaluating state...")
-        if state.completed_step_ids:
-            logger.info("✅ Completed steps so far: %s", state.completed_step_ids)
+        # 1. Format Plan Checklist for the LLM
+        plan_checklist = "No Technical Plan exists."
+        completed_set = set(state.completed_step_ids or [])
+        if state.task_plan:
+            checklist_items = []
+
+            # Map step_id to latest execution record for display
+            history_map = {rec.step_id: rec for rec in state.execution_history or []}
+
+            for step in state.task_plan.steps:
+                status = "[x]" if step.id in completed_set else "[ ]"
+                record = history_map.get(step.id)
+                outcome = f" | Outcome: {record.outcome[:100]}" if record else ""
+                checklist_items.append(
+                    f"{status} {step.id}: {step.description} (Assigned to: {step.assigned_to}){outcome}"
+                )
+            plan_checklist = "\n".join(checklist_items)
+
+        # 2. Deterministic Next Step Resolver
+        next_step = None
+        if state.task_plan:
+            for step in state.task_plan.steps:
+                if step.id not in completed_set:
+                    # Check dependencies are satisfied
+                    deps_met = all(d in completed_set for d in step.dependencies)
+                    if deps_met:
+                        next_step = step
+                        break
+
+        if next_step:
+            # 🎯 SHORT-CIRCUIT: Route directly for planned steps.
+            # This bypasses the LLM to ensure 100% deterministic adherence to the plan.
+            agent_map = {
+                "coder": NodeName.CODER,
+                "ops": NodeName.OPS,
+                "growth": NodeName.GROWTH,
+            }
+            next_node = agent_map.get(next_step.assigned_to.lower(), NodeName.FINISH)
+            logger.info("🎯 Deterministic route: %s → %s", next_step.id, next_node)
+
+            instruction_msg = AIMessage(
+                content=f"Chief Orchestrator: {next_step.assigned_to.upper()}, please execute {next_step.id}: {next_step.description}"
+            )
+            return {
+                "next_action": next_node,
+                "messages": [instruction_msg],
+            }
+
+        # 3. Consult LLM for non-plan transitions (Planning, Finishing, Analysis)
+        # De-duplicate and sort completed steps for the prompt
+        clean_completed_ids = sorted(list(set(state.completed_step_ids or [])))
+
+        logger.info("🔍 Supervisor evaluating state (LLM judgment required)...")
+        if clean_completed_ids:
+            logger.info("✅ Completed steps so far: %s", clean_completed_ids)
         else:
             logger.info("🆕 No steps completed yet.")
 
-        # We explicitly type the result to avoid Pyright errors
+        # If we reach here, either next_step is None (plan done) or task_plan is None
+        next_step_directive = "ALL STEPS COMPLETE → route to FINISH (unless validation failed and you choose to retry)"
+        if not state.task_plan:
+            next_step_directive = "NO PLAN EXISTS → route to PLANNING for construction."
+
+        # Explicitly invoke the chain
         result = chain.invoke(
             {
                 "trigger_type": state.trigger.type if state.trigger else "unknown",
-                "task_plan": str(plan_dict) if plan_dict else "None",
-                "completed_step_ids": str(state.completed_step_ids),
+                "task_plan": plan_checklist if state.task_plan else "None",
+                "next_step_directive": next_step_directive,
+                "completed_step_ids": str(clean_completed_ids),
+                "execution_history": str(
+                    [h.model_dump() for h in (state.execution_history or [])]
+                ),
                 "validation_report": (
                     str(state.validation_report) if state.validation_report else "None"
                 ),
@@ -102,23 +162,13 @@ def supervisor_node(state: EngineeringState) -> dict:
         if isinstance(result, RouteDecision):
             reasoning = result.reasoning
             next_node = NodeName(result.next_node)
-            logger.info("🎯 Supervisor Decision: %s", next_node)
-            logger.info("💭 Reasoning: %s", reasoning)
-        elif isinstance(result, dict):
-            reasoning = result.get("reasoning", "No explicit reasoning provided.")
-            raw_node = result.get("next_node", "FINISH")
-            try:
-                next_node = NodeName(raw_node)
-            except ValueError:
-                next_node = NodeName.FINISH
         else:
             next_node = NodeName.FINISH
             reasoning = "Invalid model output, falling back to FINISH."
 
-        logger.info(f"👨‍💼 Supervisor decided: {next_node}")
-        logger.info(f"🧐 Reasoning: {reasoning}")
+        logger.info("👨‍💼 Supervisor decided: %s", next_node)
+        logger.info("🧐 Reasoning: %s", reasoning)
 
-        # We return a dict that represents the updates to the State
         return {"next_action": next_node}
 
     except Exception as e:

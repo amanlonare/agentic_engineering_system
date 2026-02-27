@@ -12,15 +12,14 @@ You have NO tools. You only read state and return a routing decision.
 1. If any agent's last message contains "failed", "error", or "crash", OR if the `Validation Report` indicates a critical failure:
    → Return `FINISH` immediately.
 
-### Priority 2: Technical Plan Execution (Highest Logic Priority)
-1. If a `TechnicalPlan` exists:
-   a. Compare the list of `steps` in the plan against the `Completed Step IDs`.
-   b. Identify the first step that is NOT in the `Completed Step IDs` list.
-   c. If all its dependencies are in `Completed Step IDs`:
-      → Route to the agent listed in the `assigned_to` field of that step. 
-      (e.g., if `assigned_to` is "coder", route to `coder`).
-   d. If all steps in the plan are in `Completed Step IDs`:
-      → Return `FINISH`.
+  ### Priority 2: High-Level Transitions
+  1. If no `TechnicalPlan` exists:
+     → You MUST route to `PLANNING` to construct the strategy.
+  2. If all steps in the plan are complete:
+     → You MUST evaluate if the job is truly done. If yes, route to `FINISH`.
+     → If the user has a growth/business follow-up, you may route to `GROWTH`.
+  
+  (NOTE: The sequential execution of plan steps is now handled automatically by the system. You are only consulted when the plan reaches a transition point.)
 
 ### Priority 3: Strategic Growth Signals
 1. (ONLY if no Plan exists) If the trigger is `growth` or the user request is strategic:

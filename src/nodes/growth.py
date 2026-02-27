@@ -1,13 +1,14 @@
 from typing import Any, Dict
 
 from langchain_core.messages import AIMessage
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 
-from src.core.config import settings
 from src.core.state import EngineeringState
-from src.schemas import GrowthRecommendation, GrowthRecommendationType
-from src.utils.config_loader import build_system_prompt, load_agent_persona
+from src.schemas import (
+    GrowthRecommendation,
+    GrowthRecommendationType,
+    StepExecutionRecord,
+    StepStatus,
+)
 from src.utils.logger import configure_logging
 
 logger = configure_logging("growth")
@@ -19,24 +20,6 @@ def growth_node(state: EngineeringState) -> Dict[str, Any]:
     Returns a structured GrowthRecommendation with a routing signal.
     """
     logger.info("📈 Growth Agent analyzing metrics...")
-
-    persona = load_agent_persona("growth")
-    system_prompt = build_system_prompt(persona)
-
-    llm = ChatOpenAI(model=settings.OPENAI_MODEL_NAME)
-
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                system_prompt
-                + "\n\nAnalyze the request and provide your recommendation.",
-            ),
-            ("placeholder", "{messages}"),
-        ]
-    )
-
-    chain = prompt | llm
 
     try:
         repo = (
@@ -51,14 +34,14 @@ def growth_node(state: EngineeringState) -> Dict[str, Any]:
             f"Findings suggest improvements in retention could be achieved by "
             f"optimizing the current flow."
         )
-        
+
         # Only suggest planning if we aren't already executing a plan
         rec_type = (
             GrowthRecommendationType.REQUIRES_PLANNING
             if not state.task_plan
             else GrowthRecommendationType.NO_ACTION
         )
-        
+
         recommendation = GrowthRecommendation(
             analysis=analysis,
             recommendation_type=rec_type,
@@ -69,12 +52,21 @@ def growth_node(state: EngineeringState) -> Dict[str, Any]:
 
         # Identify which step in the plan was just completed
         completed_ids = []
+        history = []
         if state.task_plan:
             for step in state.task_plan.steps:
                 if step.assigned_to == "growth" and step.id not in (
                     state.completed_step_ids or []
                 ):
                     completed_ids.append(step.id)
+                    history.append(
+                        StepExecutionRecord(
+                            step_id=step.id,
+                            status=StepStatus.COMPLETED,
+                            agent="growth",
+                            outcome=analysis,
+                        )
+                    )
                     logger.info("✅ Growth completed step: %s", step.id)
                     break
 
@@ -82,6 +74,7 @@ def growth_node(state: EngineeringState) -> Dict[str, Any]:
             "messages": [AIMessage(content=content)],
             "growth_recommendation": recommendation,
             "completed_step_ids": completed_ids,
+            "execution_history": history,
         }
     except Exception as e:
         error_msg = f"Growth Agent failed: {str(e)}"

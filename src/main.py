@@ -4,7 +4,6 @@ Entry point for the Agentic Engineering System.
 
 import uuid
 from datetime import datetime
-from src.core.workspace import WorkspaceManager
 
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables.config import RunnableConfig
@@ -13,6 +12,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from src.core.config import settings
 from src.core.graph import build_graph
 from src.core.state import EngineeringState
+from src.core.workspace import WorkspaceManager
 from src.schemas import TriggerContext, TriggerType
 from src.utils.logger import configure_logging
 

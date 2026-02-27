@@ -1,5 +1,21 @@
 # Changelog
 
+## [2026-02-27]
+
+### Summary of Coder Agent Completion & Orchestration Fixes
+Successfully finalized the Coder agent's tool-calling loop and least-privilege scoping. Resolved infinite orchestration loops by introducing structured step tracking and a visual progress checklist for the Supervisor.
+
+### Added
+- **Coder Agent Implementation**: Fully operational `coder_node` with a tool-calling loop, `MAX_TOOL_CALLS` safety cap, and repo-locked tools (`write_file`, `read_file`, `list_directory`).
+- **Structured Step Tracking**: Introduced `StepExecutionRecord` to capture granular outcomes (agent, status, outcome summary) for every engineering step.
+- **Supervisor Visual Checklist**: The Supervisor now formats the Technical Plan as a clean `[x]/[ ]` checklist, providing the LLM with definitive progress context.
+- **Strict Step Compliance**: Optimized Coder and Ops nodes to strictly follow assigned `Step IDs`, preventing "guessing" or premature step advancement.
+
+### Fixed
+- **Conversation Sequence Integrity**: Fixed a bug where empty AI messages with `tool_calls` were being filtered out, breaking the OpenAI message sequence.
+- **Orchestration Loop Redundancy**: Eliminated "blind" re-routing by ensuring the Supervisor and Workers share the same structured execution history.
+
+
 ## [2026-02-26]
 
 ### Major Enhancements: Tool Integration & Plan-Aware Orchestration
