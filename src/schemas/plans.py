@@ -9,6 +9,10 @@ class ExecutionStep(BaseModel):
     id: str = Field(description="Short ID (e.g., STEP-1)")
     description: str = Field(description="What needs to be done")
     assigned_to: str = Field(description="Agent responsible (e.g., 'coder')")
+    target_repo: Optional[str] = Field(
+        default=None,
+        description="The repository name involved in this step (e.g., 'mobile-app')",
+    )
     dependencies: List[str] = Field(
         default_factory=list, description="IDs of steps that must complete first"
     )

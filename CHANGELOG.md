@@ -1,5 +1,20 @@
 # Changelog
 
+## [2026-02-26]
+
+### Major Enhancements: Tool Integration & Plan-Aware Orchestration
+Today we shifted the system from a rigid "Planning -> Coder" flow to a dynamic, plan-driven model where the Supervisor dispatches work based on a structured TechnicalPlan.
+
+### Added
+- **Plan-Aware Orchestration**: The Supervisor now cross-references the `TechnicalPlan` with `completed_step_ids` to dynamically route to the next assigned agent.
+- **Structured Plan Data**: Implemented `.model_dump()` in the orchestration loop to provide the Supervisor with clean, machine-readable JSON context instead of generic strings.
+- **Step Completion Tracking**: Workers (Coder/Ops) now report their specific `step_id` completion to the system state.
+- **Deterministic Testing Suite**: Added isolated testing scripts to verify Supervisor and Planning logic without running the full graph.
+
+### Fixed
+- **Missing Task Description**: Resolved a bug where the user's initial request was lost during transition to the Planning node.
+- **Persona Tooling**: Standardized tool binding across all agents, ensuring `read_file`, `search_codebase`, and `list_directory` are available globally.
+
 ## [2026-02-25]
 
 ### Summary of Major Architectural & Reliability Enhancements

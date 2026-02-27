@@ -50,7 +50,20 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
             logs="End-to-end mock verification successful.",
         )
 
-        return {"messages": [AIMessage(content=content)], "validation_report": report}
+        # Identify completed step (Mock logic for now)
+        completed_ids = []
+        if state.task_plan:
+            for step in state.task_plan.steps:
+                if step.assigned_to == "ops" and step.id not in (state.completed_step_ids or []):
+                    completed_ids.append(step.id)
+                    logger.info("✅ Ops completed step: %s", step.id)
+                    break
+
+        return {
+            "messages": [AIMessage(content=content)],
+            "validation_report": report,
+            "completed_step_ids": completed_ids,
+        }
     except Exception as e:
         error_msg = f"Ops Agent failed: {str(e)}"
         logger.error("❌ %s", error_msg)

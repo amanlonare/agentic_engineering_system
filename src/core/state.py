@@ -36,6 +36,10 @@ class EngineeringState(BaseModel):
     task_plan: Optional[TechnicalPlan] = Field(
         default=None, description="Structured plan from Planning node"
     )
+    # Track completed steps from the plan
+    completed_step_ids: Annotated[List[str], operator.add] = Field(
+        default_factory=list, description="IDs of steps from the TechnicalPlan that are finished"
+    )
     growth_recommendation: Optional[GrowthRecommendation] = Field(
         default=None, description="Structured analysis and signal from Growth node"
     )

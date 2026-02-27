@@ -48,14 +48,13 @@ def supervisor_node(state: EngineeringState) -> dict:
     human_prompt = HumanMessagePromptTemplate.from_template(
         "### WORKFLOW CONTEXT\n"
         "Current Trigger: {trigger_type}\n"
-        "Payload: {trigger_payload}\n"
         "Targeted Repository: {repo_name}\n"
-        "Static Task Plan (The Goal): {task_plan}\n"
+        "Static Task Plan: {task_plan}\n"
+        "Completed Step IDs: {completed_step_ids}\n"
         "Approval Status: {approval_status}\n"
         "Validation Report: {validation_report}\n\n"
-        "### RECENT MESSAGES (The Reality of what happened)\n"
-        "Verify the messages below to see what the agents have ACTUALLY done so far. "
-        "If a message says 'testing is required' or 'implementation complete', DO NOT repeat that step.\n"
+        "### RECENT MESSAGES\n"
+        "Verify the messages below to see what the agents have ACTUALLY done.\n"
     )
 
     prompt = ChatPromptTemplate.from_messages(
@@ -65,7 +64,7 @@ def supervisor_node(state: EngineeringState) -> dict:
             MessagesPlaceholder(variable_name="messages"),
             (
                 "system",
-                "Based on the Reality (Messages) vs the Goal (Plan), who acts next?",
+                "Based on the Plan vs the Completed Steps vs the Messages, who acts next?",
             ),
         ]
     )
@@ -74,12 +73,21 @@ def supervisor_node(state: EngineeringState) -> dict:
     chain = prompt | llm.with_structured_output(RouteDecision)
 
     try:
+        # Prepare structured plan context
+        plan_dict = state.task_plan.model_dump() if state.task_plan else {}
+        
+        logger.info("🔍 Supervisor evaluating state...")
+        if state.completed_step_ids:
+            logger.info("✅ Completed steps so far: %s", state.completed_step_ids)
+        else:
+            logger.info("🆕 No steps completed yet.")
+
         # We explicitly type the result to avoid Pyright errors
         result = chain.invoke(
             {
                 "trigger_type": state.trigger.type if state.trigger else "unknown",
-                "trigger_payload": str(state.trigger.payload if state.trigger else {}),
-                "task_plan": str(state.task_plan) if state.task_plan else "None",
+                "task_plan": str(plan_dict) if plan_dict else "None",
+                "completed_step_ids": str(state.completed_step_ids),
                 "validation_report": (
                     str(state.validation_report) if state.validation_report else "None"
                 ),
@@ -93,14 +101,9 @@ def supervisor_node(state: EngineeringState) -> dict:
 
         if isinstance(result, RouteDecision):
             reasoning = result.reasoning
-            # Safely cast the string back to the NodeName enum
-            try:
-                next_node = NodeName(result.next_node)
-            except ValueError:
-                logger.warning(
-                    f"Supervisor returned invalid node name: {result.next_node}. Routing to FINISH."
-                )
-                next_node = NodeName.FINISH
+            next_node = NodeName(result.next_node)
+            logger.info("🎯 Supervisor Decision: %s", next_node)
+            logger.info("💭 Reasoning: %s", reasoning)
         elif isinstance(result, dict):
             reasoning = result.get("reasoning", "No explicit reasoning provided.")
             raw_node = result.get("next_node", "FINISH")

@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 from src.core.workspace import WorkspaceManager
 
+from langchain_core.messages import HumanMessage
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.checkpoint.sqlite import SqliteSaver
 
@@ -47,7 +48,7 @@ def main():
 
                 # 3. Initialize state with the dynamic trigger and identified repo
                 initial_state = EngineeringState(
-                    messages=[],
+                    messages=[HumanMessage(content=user_input)],
                     trigger=TriggerContext(
                         type=TriggerType.MANUAL,
                         payload={"description": user_input},

@@ -10,29 +10,17 @@ from src.schemas import ApprovalStatus, TechnicalPlan
 from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.utils.logger import configure_logging
 
+from src.tools import read_file
+
 logger = configure_logging("planning")
-
-# Pre-load the architecture map once at import time
-_ARCHITECTURE_MAP_PATH = os.path.join(".context", "architecture_map.md")
-
-
-def _load_architecture_map() -> str:
-    """Read the architecture map file and return its content."""
-    try:
-        with open(_ARCHITECTURE_MAP_PATH, "r") as f:
-            return f.read()
-    except FileNotFoundError:
-        logger.warning("⚠️ architecture_map.md not found at %s", _ARCHITECTURE_MAP_PATH)
-        return "(Architecture map not available)"
 
 
 def planning_node(state: EngineeringState) -> Dict[str, Any]:
     """
     Planning Agent: Designs technical implementation plans.
 
-    This agent has NO tools. It receives the architecture map as injected
-    context and produces a TechnicalPlan using a single structured LLM call.
-    This prevents unnecessary file reading loops.
+    This agent can now use the `read_file` tool to read the architecture map.
+    It produces a TechnicalPlan using structured LLM outputs.
     """
     logger.info("🧠 Planning Agent designing plan...")
 
@@ -40,79 +28,77 @@ def planning_node(state: EngineeringState) -> Dict[str, Any]:
     persona = load_agent_persona("planning")
     system_prompt = build_system_prompt(persona)
 
-    # 2. Inject the architecture map directly into the prompt (Filtered by Repo)
-    repo = (
-        state.trigger.repo_name if state.trigger and state.trigger.repo_name else None
-    )
-    raw_map = _load_architecture_map()
-
-    if repo:
-        # Simple extraction: find the header for the repo and take everything until the next header
-        import re
-
-        # Find ## [Num]. [repo]
-        pattern = rf"(## \d+\. {re.escape(repo)}.*?)(?=\n## \d+\. |\Z)"
-        match = re.search(pattern, raw_map, re.DOTALL | re.IGNORECASE)
-        if match:
-            architecture_map = match.group(1).strip()
-            logger.info("🎯 Filtered architecture map for repo: %s", repo)
-        else:
-            architecture_map = f"(No specific map entry found for repo '{repo}')\n\nFull Map:\n{raw_map}"
-            logger.warning(
-                "⚠️ Could not find repo '%s' in architecture map, falling back to full map.",
-                repo,
-            )
-    else:
-        architecture_map = raw_map
-
-    full_prompt = (
-        f"{system_prompt}\n\n"
-        f"## Filtered Architecture Map for `{repo or 'General'}`:\n"
-        f"```\n{architecture_map}\n```"
-    )
-
-    # 3. Single structured LLM call — no agent loop, no tools
+    # 2. Setup LLM and tools
     llm = ChatOpenAI(model=settings.OPENAI_MODEL_NAME, temperature=0)
+    llm_with_tools = llm.bind_tools([read_file])
     structured_llm = llm.with_structured_output(TechnicalPlan)
 
+    # 3. Build messages
+    user_messages = [
+        m.content for m in state.messages if hasattr(m, "content") and m.content
+    ]
+    
+    if user_messages:
+        task_description = user_messages[-1]
+    elif state.trigger and "description" in state.trigger.payload:
+        task_description = state.trigger.payload.get("description", "No task description provided.")
+        logger.info("ℹ️ Using task description from trigger payload fallback.")
+    else:
+        task_description = "No task description provided."
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": task_description},
+    ]
+
     try:
-        # Build the user message from the state
-        user_messages = [
-            m.content for m in state.messages if hasattr(m, "content") and m.content
-        ]
-        task_description = (
-            user_messages[-1] if user_messages else "No task description provided."
-        )
+        # Step 1: Allow the agent to call tools
+        response = llm_with_tools.invoke(messages)
 
-        plan = structured_llm.invoke(
-            [
-                {"role": "system", "content": full_prompt},
-                {"role": "user", "content": task_description},
-            ]
-        )
+        if response.tool_calls:
+            logger.info("🛠️ Planning Agent calling tools: %s", response.tool_calls)
+            messages.append(response)  # Add assistant message with tool calls
 
-        logger.info("✅ Planning Agent complete (single LLM call, zero tool calls)")
+            for tool_call in response.tool_calls:
+                if tool_call["name"] == "read_file":
+                    # Execute tool call
+                    result = read_file.invoke(tool_call["args"])
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call["id"],
+                            "content": str(result),
+                        }
+                    )
+                else:
+                    logger.warning("⚠️ Planning Agent tried to call unknown tool: %s", tool_call["name"])
+
+        # Step 2: Final structured output call
+        logger.info("📋 Generating structured TechnicalPlan...")
+        plan: Any = structured_llm.invoke(messages)
+
+        logger.info("✅ Planning Agent complete")
         if plan:
-            logger.info("📋 Plan Title: %s", plan.title)  # type: ignore[union-attr]
-            logger.info("📝 Plan Summary: %s", plan.summary)  # type: ignore[union-attr]
-            for i, step in enumerate(plan.steps, 1):  # type: ignore[union-attr]
+            logger.info("📋 Plan Title: %s", plan.title)
+            logger.info("📝 Plan Summary: %s", plan.summary)
+            for i, step in enumerate(plan.steps, 1):
                 logger.info(
                     "   🔹 Step %s: %s (assigned to: %s)",
                     step.id,
                     step.description,
                     step.assigned_to,
                 )
-            if plan.definition_of_done:  # type: ignore[union-attr]
-                for item in plan.definition_of_done:  # type: ignore[union-attr]
+            if plan.definition_of_done:
+                for item in plan.definition_of_done:
                     logger.info("   🏁 DoD: %s", item)
-            logger.info("⚠️  Risk: %s", plan.estimated_risk)  # type: ignore[union-attr]
+            logger.info("⚠️  Risk: %s", plan.estimated_risk)
 
         repo = (
             state.trigger.repo_name
             if state.trigger and state.trigger.repo_name
             else "unknown"
         )
-        content = f"Planning is complete for the `{repo}` repository. The technical plan is ready for implementation by the Coder."
+        content = f"Planning is complete for the `{repo}` repository. The technical plan is ready for implementation."
 
         return {
             "messages": [AIMessage(content=content)],

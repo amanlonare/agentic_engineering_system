@@ -43,9 +43,19 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
         # Simulate LLM response or tool call outcomes
         content = f"Successfully updated `{repo}` repository. Now testing is required for these changes."
 
+        # Identify completed step (Mock logic for now)
+        completed_ids = []
+        if state.task_plan:
+            for step in state.task_plan.steps:
+                if step.assigned_to == "coder" and step.id not in (state.completed_step_ids or []):
+                    completed_ids.append(step.id)
+                    logger.info("✅ Coder completed step: %s", step.id)
+                    break
+
         return {
             "messages": [AIMessage(content=content)],
             "code_diffs": f"Mock implementation for {repo}.",
+            "completed_step_ids": completed_ids,
         }
     except Exception as e:
         error_msg = f"Coder Agent failed: {str(e)}"

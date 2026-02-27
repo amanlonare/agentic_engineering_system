@@ -47,11 +47,18 @@ def growth_node(state: EngineeringState) -> Dict[str, Any]:
 
         # Mock: simulate a data-driven recommendation
         analysis = (
-            f"Based on user engagement metrics, the `{repo}` repository "
-            f"should implement a new promotion strategy to improve retention. "
-            f"This requires adding a rewards module and updating the notification system."
+            f"Analyzed user engagement metrics for `{repo}`. "
+            f"Findings suggest improvements in retention could be achieved by "
+            f"optimizing the current flow."
         )
-        rec_type = GrowthRecommendationType.REQUIRES_PLANNING
+        
+        # Only suggest planning if we aren't already executing a plan
+        rec_type = (
+            GrowthRecommendationType.REQUIRES_PLANNING
+            if not state.task_plan
+            else GrowthRecommendationType.NO_ACTION
+        )
+        
         recommendation = GrowthRecommendation(
             analysis=analysis,
             recommendation_type=rec_type,
@@ -60,9 +67,21 @@ def growth_node(state: EngineeringState) -> Dict[str, Any]:
 
         content = f"{analysis}\n\nrecommendation_type: {rec_type.value}"
 
+        # Identify which step in the plan was just completed
+        completed_ids = []
+        if state.task_plan:
+            for step in state.task_plan.steps:
+                if step.assigned_to == "growth" and step.id not in (
+                    state.completed_step_ids or []
+                ):
+                    completed_ids.append(step.id)
+                    logger.info("✅ Growth completed step: %s", step.id)
+                    break
+
         return {
             "messages": [AIMessage(content=content)],
             "growth_recommendation": recommendation,
+            "completed_step_ids": completed_ids,
         }
     except Exception as e:
         error_msg = f"Growth Agent failed: {str(e)}"
