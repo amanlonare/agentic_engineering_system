@@ -1,10 +1,9 @@
 import hashlib
 import hmac
 import json
-import pytest
-
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 
 from src.api.app import create_app
@@ -45,7 +44,11 @@ def test_health_check():
     """Verify the health endpoint works."""
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "service": "agentic-engineering-api"}
+    assert response.json() == {
+        "status": "ok",
+        "service": "agentic-engineering-api",
+        "workspace_ready": False,
+    }
 
 
 def test_webhook_missing_signature():

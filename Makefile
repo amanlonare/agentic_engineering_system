@@ -7,12 +7,12 @@ install:
 	uv sync
 
 format:
-	uv run ruff check --select I --fix src/
-	uv run ruff format src/
-	uv run ruff check --fix src/
+	uv run ruff check --select I --fix src/ tests/
+	uv run ruff format src/ tests/
+	uv run ruff check --fix src/ tests/
 
 lint:
-	uv run ruff check src/
+	uv run ruff check src/ tests/
 
 ingest:
 	uv run python -m src.scripts.ingest_context
