@@ -5,7 +5,6 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.webhooks import router as webhooks_router
-from src.core.config import settings
 from src.core.workspace import WorkspaceManager
 from src.utils.logger import configure_logging
 
@@ -31,7 +30,6 @@ async def lifespan(app: FastAPI):
 
     # 1. Initialize DB Memory
     logger.info("📡 Connecting to Checkpoint DB...")
-    db_path = settings.DATABASE_URL.replace("sqlite:///", "")
 
     # We create the generic SqliteSaver without passing a connection object directly
     # The SqliteSaver from_conn_string requires entering its context to set up tables

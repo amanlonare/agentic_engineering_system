@@ -52,7 +52,9 @@ class WorkspaceManager:
         # 1. Deterministic Keywords
         # If the user mentions "Agentic Team", route to the testing sandbox
         if "agentic team" in desc_lower or "agent team" in desc_lower:
-            logger.info("🎯 Routing to 'testing_agentic_engineering_team' via explicit keyword.")
+            logger.info(
+                "🎯 Routing to 'testing_agentic_engineering_team' via explicit keyword."
+            )
             return "testing_agentic_engineering_team"
 
         # 2. Exact Repo Name Matching
@@ -60,7 +62,9 @@ class WorkspaceManager:
         if os.path.exists(self.context_dir):
             for repo_name in os.listdir(self.context_dir):
                 if repo_name.lower() in desc_lower:
-                    logger.info("🎯 Routing to '%s' via exact folder name match.", repo_name)
+                    logger.info(
+                        "🎯 Routing to '%s' via exact folder name match.", repo_name
+                    )
                     return repo_name
 
         # 3. Semantic Fallback

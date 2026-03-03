@@ -15,9 +15,10 @@ def get_graph(request: Request):
     Uses a generator to safely manage the SQLite checkpointer context.
     """
     from langgraph.checkpoint.sqlite import SqliteSaver
+
     from src.core.config import settings
 
     db_path = settings.DATABASE_URL.replace("sqlite:///", "")
-    
+
     with SqliteSaver.from_conn_string(db_path) as memory:
         yield build_graph(memory)
