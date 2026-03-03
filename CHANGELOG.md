@@ -1,5 +1,23 @@
 # Changelog
 
+## [2026-03-03]
+
+### Summary of GitHub Webhook Integration & Routing Optimizations
+Successfully implemented a production-ready GitHub Issues webhook integration. Resolved critical API failures related to database connection management and optimized repository routing to eliminate cross-repo "hallucinations" during multi-step tasks.
+
+### Added
+- **GitHub Webhook Integration**: New FastAPI layer (`/webhooks/github`) to synchronously trigger the agentic graph from GitHub events.
+- **HMAC-SHA256 Validation**: Implemented secure payload verification using GitHub secrets.
+- **Deterministic Routing**: Enhanced `WorkspaceManager` with keyword-based prioritization (e.g., "Agentic Team") to prevent semantic misrouting.
+- **Explicit Repo Mapping**: Updated `architecture_map.md` with explicit `[ID]` tags for unambiguous repository identification by the Planner.
+- **Lifecycle Management**: Refactored `SqliteSaver` initialization to use a generator-based dependency, fixing internal server errors.
+
+### Fixed
+- **403 Forbidden**: Resolved signature mismatches by enforcing strict `application/json` parsing.
+- **500 Internal Error**: Fixed an incorrectly handled context manager in the LangGraph checkpointer initialization.
+- **Infinite Execution Loops**: Blocked redundant rework cycles by providing the Supervisor with explicit failure context from the Ops agent.
+
+
 ## [2026-03-02]
 
 ### Summary of Ops Agent Completion & Resilience Fixes

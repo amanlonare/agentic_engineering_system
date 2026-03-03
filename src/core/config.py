@@ -20,5 +20,11 @@ class Settings(BaseSettings):
     # Infrastructure
     DATABASE_URL: str = "sqlite:///./engineering_agents.db"
 
+    # API Server & Webhooks
+    GITHUB_WEBHOOK_SECRET: str | None = None
+    GITHUB_TOKEN: str | None = None
+    API_HOST: str = "0.0.0.0"
+    API_PORT: int = 8000
+
 
 settings = Settings()
