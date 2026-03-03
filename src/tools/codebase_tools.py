@@ -82,6 +82,8 @@ def list_directory(path: str = ".context") -> str:
         items = os.listdir(safe_path)
         # We allow .context but block internal config dirs like .git/
         items = [i for i in items if i != "__pycache__" and not i.startswith(".git")]
+        if not items:
+            return f"The directory '{path}' is empty."
         return "\n".join(sorted(items))
     except Exception as e:
         return f"Error listing directory: {str(e)}"
@@ -160,11 +162,21 @@ def get_restricted_tools(restriction_scope: str) -> list:
         try:
             safe_path = enforce_scope(path)
         except PermissionError as e:
-            return str(e)
+            error_msg = (
+                f"ERROR: File was NOT written. {e}. "
+                f"You MUST use the full path starting with '.context/{restriction_scope}/' "
+                f"(e.g., '.context/{restriction_scope}/package.json')."
+            )
+            logger.error(
+                f"🚫 Restricted Tool: Path rejected for '{path}' — {error_msg}"
+            )
+            return error_msg
 
         logger.info(f"📝 Restricted Tool: Writing file '{safe_path}'...")
         try:
-            os.makedirs(os.path.dirname(safe_path), exist_ok=True)
+            parent_dir = os.path.dirname(safe_path)
+            if parent_dir:  # Only call makedirs if there's actually a parent directory
+                os.makedirs(parent_dir, exist_ok=True)
             with open(safe_path, "w") as f:
                 f.write(content)
             return f"Successfully wrote to {safe_path}"
@@ -202,7 +214,12 @@ def get_restricted_tools(restriction_scope: str) -> list:
         StructuredTool.from_function(
             func=restricted_write_file,
             name="write_file",
-            description="Write or overwrite a file with new content. Use for feature code and unit tests.",
+            description=(
+                f"Write or overwrite a file with new content. "
+                f"Path MUST start with '.context/{restriction_scope}/' "
+                f"(e.g., '.context/{restriction_scope}/src/MyComponent.js'). "
+                "Files written outside this prefix will be REJECTED."
+            ),
             args_schema=WriteFileArgs,
         ),
         StructuredTool.from_function(
@@ -237,6 +254,11 @@ def get_ops_tools(restriction_scope: str) -> list:
     class FilePathArgs(BaseModel):
         path: str = Field(description="The path to the file or directory")
 
+    class ExecuteCommandArgs(BaseModel):
+        command: str = Field(
+            description="The shell command to execute (e.g., 'pytest', 'flake8', 'python -m unittest')"
+        )
+
     def restricted_read_file(path: str) -> str:
         """Read the contents of a specific file from the locked repository."""
         try:
@@ -267,6 +289,54 @@ def get_ops_tools(restriction_scope: str) -> list:
         except Exception as e:
             return f"Error: {e}"
 
+    def restricted_execute_command(command: str) -> str:
+        """Execute a shell command within the locked repository directory."""
+        import subprocess
+
+        logger.info(
+            f"⚙️ Restricted Tool: Executing command '{command}' in '{base_dir}'..."
+        )
+
+        # Ensure the directory actually exists before trying to run commands in it
+        if not os.path.exists(base_dir):
+            return f"Error: The repository directory '{restriction_scope}' does not exist directly. Cannot run commands."
+
+        try:
+            # We use shell=True here to allow generic commands like `pytest tests/`
+            # Note: in a true production system accepting arbitrary LLM input, shell=True is dangerous
+            # However, since this is a prototype limited to the .context/, we will allow it for flexibility
+            # with a strict timeout.
+            result = subprocess.run(
+                command,
+                shell=True,
+                cwd=base_dir,
+                capture_output=True,
+                text=True,
+                timeout=20,  # Hard timeout to prevent infinite hanging
+            )
+
+            output = ""
+            if result.stdout:
+                output += f"STDOUT:\n{result.stdout}\n"
+                logger.info(f"--- STDOUT ---\n{result.stdout}")
+            if result.stderr:
+                output += f"STDERR:\n{result.stderr}\n"
+                logger.warning(f"--- STDERR ---\n{result.stderr}")
+
+            output += f"Exit Code: {result.returncode}"
+            logger.info(f"Command finished with Exit Code: {result.returncode}")
+
+            # Truncate extremely long outputs for the LLM context, but keep logs full
+            if len(output) > 2000:
+                return output[:2000] + "\n\n...[OUTPUT TRUNCATED TO SAVE CONTEXT SIZE]"
+
+            return output
+
+        except subprocess.TimeoutExpired:
+            return f"Error: Command '{command}' timed out after 20 seconds."
+        except Exception as e:
+            return f"Error executing command: {str(e)}"
+
     return [
         StructuredTool.from_function(
             func=restricted_read_file,
@@ -279,5 +349,11 @@ def get_ops_tools(restriction_scope: str) -> list:
             name="list_directory",
             description="List the contents of a directory to explore the repository structure.",
             args_schema=FilePathArgs,
+        ),
+        StructuredTool.from_function(
+            func=restricted_execute_command,
+            name="execute_command",
+            description="Execute a shell command (like tests or linters) inside the isolated repository directory. Use this to actively verify code.",
+            args_schema=ExecuteCommandArgs,
         ),
     ]

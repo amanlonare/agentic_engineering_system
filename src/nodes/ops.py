@@ -77,6 +77,10 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
         instructions = (
             f"Current Plan Step [{current_step.id}]: {current_step.description}"
         )
+        if current_step.verification_criteria:
+            instructions += (
+                f"\nVerification Criteria: {current_step.verification_criteria}"
+            )
 
     logger.info(f"🔒 Locking tools to repository: {repo}")
 
@@ -89,12 +93,16 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
     llm_with_tools = llm.bind_tools(tools)
 
     messages: List[BaseMessage] = [SystemMessage(content=system_prompt)]
-    messages.extend(state.messages)
+    messages.extend(
+        state.messages
+    )  # Full history — nodes only return final summary to state
     messages.append(HumanMessage(content=instructions))
 
     try:
         # 3. Tool-Calling Loop
         tool_call_count = 0
+        turn_tool_history: Dict[str, str] = {}  # Track ALL calls in this turn
+
         while tool_call_count < MAX_TOOL_CALLS:
             response = llm_with_tools.invoke(messages)
             messages.append(response)
@@ -103,6 +111,26 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
                 break
 
             for tool_call in response.tool_calls:
+                current_call = f"{tool_call['name']}({str(tool_call['args'])})"
+
+                # DETERMINISTIC LOOP PREVENTION: Intercept repeat calls
+                if current_call in turn_tool_history:
+                    prev_result = turn_tool_history[current_call]
+                    logger.warning(
+                        f"🚫 Duplicate tool call detected in OPs: {current_call}"
+                    )
+                    messages.append(
+                        ToolMessage(
+                            tool_call_id=tool_call["id"],
+                            content=(
+                                f"⚠️ DETERMINISTIC STOP: You already called {current_call} in this turn.\n"
+                                f"RESULT: {prev_result}\n"
+                                f"Do NOT repeat this call. Verification must proceed."
+                            ),
+                        )
+                    )
+                    continue
+
                 tool_instance = next(
                     (t for t in tools if t.name == tool_call["name"]), None
                 )
@@ -111,6 +139,8 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
                     messages.append(
                         ToolMessage(tool_call_id=tool_call["id"], content=str(result))
                     )
+                    # Cache result
+                    turn_tool_history[current_call] = str(result)
                 else:
                     messages.append(
                         ToolMessage(
@@ -126,6 +156,7 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
         structured_llm = ChatOpenAI(
             model=settings.OPENAI_MODEL_NAME, temperature=0.0, max_retries=5
         ).with_structured_output(TestReport)
+
         # Invoke returns TestReport as requested by with_structured_output
         report = cast(
             TestReport,
@@ -133,16 +164,37 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
                 messages
                 + [
                     HumanMessage(
-                        content="Finalize the TestReport based on your findings."
+                        content="Finalize the TestReport based on your findings. Be honest about failures."
                     )
                 ]
             ),
         )
 
+        # CRITICAL FIX: Override LLM "hallucination" of success if we saw a non-zero exit code in messages
+        actual_command_failure = False
+        failure_details = ""
+        for msg in messages:
+            if isinstance(msg, ToolMessage) and "Exit Code:" in msg.content:
+                # Basic check for non-zero exit code
+                if "Exit Code: 0" not in msg.content:
+                    actual_command_failure = True
+                    failure_details = msg.content  # Capture the full STDERR + exit code
+                    logger.warning(
+                        "🚨 Detected actual command failure in tool outputs. Overriding report.success to False."
+                    )
+                    break
+
+        if actual_command_failure:
+            report.success = False
+
         # 5. Populate Execution History
         if completed_ids and current_step:
             status = StepStatus.COMPLETED if report.success else StepStatus.FAILED
-            outcome = f"Verification {'Passed' if report.success else 'Failed'}. {report.logs[:200] if report.logs else ''}"
+            # Include the full command failure output so the Supervisor can relay it to the Coder
+            if failure_details:
+                outcome = f"Verification Failed.\n\nCOMMAND OUTPUT:\n{failure_details}"
+            else:
+                outcome = f"Verification {'Passed' if report.success else 'Failed'}. {report.logs or ''}"
             history = [
                 StepExecutionRecord(
                     step_id=current_step.id,
@@ -153,7 +205,9 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
             ]
 
         return {
-            "messages": messages,
+            # Only return the FINAL summary message to shared state, not all internal tool calls.
+            # This prevents state.messages from growing unboundedly with every tool call made.
+            "messages": [messages[-1]],
             "validation_report": report,
             "completed_step_ids": completed_ids if report.success else [],
             "execution_history": history,

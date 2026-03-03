@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026-03-03]
+
+### Summary of Ops Agent Completion & Resilience Fixes
+Finalized the Ops agent and integrated a robust sandbox execution environment. Implemented deterministic loop prevention and language-agnostic verification strategies to handle complex enterprise repositories and empty states.
+
+### Added
+- **Ops Agent Integration**: Fully functional `ops_node` that validates Coder outputs using repository-locked tools.
+- **Execution Runner**: Integrated `run_command` to execute verification scripts (Python, Node.js) in a restricted sandbox.
+- **Pre-loaded Repo Tree**: Optimized Coder start-up by pre-injecting the directory structure, eliminating redundant discovery calls.
+- **Tiered Verification**: Added support for language-native execution (Python/JS) and structural verification fallbacks.
+
+### Fixed
+- **ModuleNotFoundError**: Resolved by enforcing `sys.modules` mocking for 3rd-party dependencies in verification scripts.
+- **Deterministic Loop Prevention**: Implemented turn-based tool history to block oscillating or redundant tool calls.
+
+
+
 ## [2026-02-27]
 
 ### Summary of Coder Agent Completion & Orchestration Fixes

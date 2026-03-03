@@ -37,6 +37,10 @@ class ExecutionStep(BaseModel):
     dependencies: List[str] = Field(
         default_factory=list, description="IDs of steps that must complete first"
     )
+    verification_criteria: Optional[str] = Field(
+        default=None,
+        description="Specific testing/validation details for this step (e.g., 'Run pytest and verify output')",
+    )
 
 
 class TechnicalPlan(BaseModel):

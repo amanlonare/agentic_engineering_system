@@ -13,7 +13,7 @@ from langchain_core.prompts import (
 from src.core.state import EngineeringState
 from src.prompts.supervisor import SUPERVISOR_SYSTEM_PROMPT
 from src.providers.chat_models import get_chat_model
-from src.schemas import NodeName, RouteDecision
+from src.schemas import NodeName, RouteDecision, StepStatus
 from src.utils.logger import configure_logging
 
 logger = configure_logging("supervisor")
@@ -94,8 +94,55 @@ def supervisor_node(state: EngineeringState) -> dict:
             plan_checklist = "\n".join(checklist_items)
 
         # 2. Deterministic Next Step Resolver
+        # We first check if ANY recently attempted step failed and needs rework.
+        # This prevents "looping" if a step was mistakenly marked as complete but fails verification.
         next_step = None
         if state.task_plan:
+            # Check all steps in the plan that have execution history
+            for step in state.task_plan.steps:
+                last_record = next(
+                    (
+                        rec
+                        for rec in reversed(state.execution_history or [])
+                        if rec.step_id == step.id
+                    ),
+                    None,
+                )
+                if last_record and last_record.status == StepStatus.FAILED:
+                    # Rework needed!
+                    agent_map = {"coder": NodeName.CODER, "ops": NodeName.OPS}
+                    # Count how many times this step has already been reworked
+                    MAX_REWORK_ATTEMPTS = 3
+                    rework_count = sum(
+                        1
+                        for rec in (state.execution_history or [])
+                        if rec.step_id == step.id and rec.status == StepStatus.FAILED
+                    )
+                    if rework_count >= MAX_REWORK_ATTEMPTS:
+                        logger.error(
+                            "🛑 Step %s has failed %d times. Stopping to prevent infinite loop.",
+                            step.id,
+                            rework_count,
+                        )
+                        return {"next_action": NodeName.FINISH}
+
+                    next_node = NodeName.CODER  # Most failures go back to coder
+                    logger.info(
+                        "🔄 Rework detected! Verification for %s failed. Routing back to CODER.",
+                        step.id,
+                    )
+                    rework_msg = (
+                        f"CHIEF ORCHESTRATOR: Verification failed for {step.id}.\n\n"
+                        f"FAILURE DETAILS FROM OPS AGENT:\n{last_record.outcome}\n\n"
+                        f"CODER: Analyse the failure above carefully and fix the root cause. "
+                        f"Do NOT repeat what failed — change the approach based on the error."
+                    )
+                    return {
+                        "next_action": next_node,
+                        "messages": [AIMessage(content=rework_msg)],
+                    }
+
+            # If no rework needed, find the first uncompleted step
             for step in state.task_plan.steps:
                 if step.id not in completed_set:
                     # Check dependencies are satisfied
@@ -105,16 +152,14 @@ def supervisor_node(state: EngineeringState) -> dict:
                         break
 
         if next_step:
-            # 🎯 SHORT-CIRCUIT: Route directly for planned steps.
-            # This bypasses the LLM to ensure 100% deterministic adherence to the plan.
             agent_map = {
                 "coder": NodeName.CODER,
                 "ops": NodeName.OPS,
                 "growth": NodeName.GROWTH,
             }
             next_node = agent_map.get(next_step.assigned_to.lower(), NodeName.FINISH)
-            logger.info("🎯 Deterministic route: %s → %s", next_step.id, next_node)
 
+            logger.info("🎯 Deterministic route: %s → %s", next_step.id, next_node)
             instruction_msg = AIMessage(
                 content=f"Chief Orchestrator: {next_step.assigned_to.upper()}, please execute {next_step.id}: {next_step.description}"
             )

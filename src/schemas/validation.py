@@ -22,6 +22,7 @@ class TestReport(BaseModel):
     suite_name: str = Field(
         description="Name of the test suite (e.g., 'Integration Tests')"
     )
+    success: bool = Field(description="Overall outcome of the verification")
     total_tests: int = Field(description="Number of tests executed")
     passed_count: int = Field(description="Number of passing tests")
     failures: List[TestCaseResult] = Field(
@@ -30,7 +31,3 @@ class TestReport(BaseModel):
     logs: Optional[str] = Field(
         default=None, description="Raw stdout/stderr logs from the test run"
     )
-
-    @property
-    def success(self) -> bool:
-        return self.passed_count == self.total_tests

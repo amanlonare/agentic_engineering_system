@@ -35,7 +35,7 @@ class TestOpsDeterministic(unittest.TestCase):
         mock_build_prompt.return_value = "System prompt"
         
         mock_tool = MagicMock()
-        mock_tool.name = "read_file"
+        mock_tool.name = "execute_command"
         mock_get_tools.return_value = [mock_tool]
 
         # Mock LLM behavior for tool calling loop
@@ -43,7 +43,7 @@ class TestOpsDeterministic(unittest.TestCase):
         
         # First call returns a tool call
         tool_call_resp = MagicMock()
-        tool_call_resp.tool_calls = [{"name": "read_file", "args": {"path": "test.js"}, "id": "1"}]
+        tool_call_resp.tool_calls = [{"name": "execute_command", "args": {"command": "pytest"}, "id": "1"}]
         
         # Second call returns final reasoning
         final_resp = MagicMock()
@@ -62,7 +62,8 @@ class TestOpsDeterministic(unittest.TestCase):
             total_tests=1,
             passed_count=1,
             failures=[],
-            logs="Inspected AuthService.js, looks correct."
+            logs="Inspected AuthService.js, looks correct.",
+            success=True
         )
         mock_structured_llm.invoke.return_value = mock_report
         
@@ -90,7 +91,7 @@ class TestOpsDeterministic(unittest.TestCase):
         self.assertEqual(result["execution_history"][0].status, StepStatus.COMPLETED)
         
         # Verify tool was called
-        mock_tool.invoke.assert_called_once_with({"path": "test.js"})
+        mock_tool.invoke.assert_called_once_with({"command": "pytest"})
 
     @patch("src.nodes.ops.ChatOpenAI")
     @patch("src.nodes.ops.get_ops_tools")
@@ -106,7 +107,8 @@ class TestOpsDeterministic(unittest.TestCase):
             total_tests=1,
             passed_count=0,
             failures=[TestCaseResult(name="Step Verification", passed=False, error_message="Logic error")],
-            logs="Found a missing null check."
+            logs="Found a missing null check.",
+            success=False
         )
         mock_structured_llm.invoke.return_value = mock_report
         mock_llm_instance.with_structured_output.return_value = mock_structured_llm
