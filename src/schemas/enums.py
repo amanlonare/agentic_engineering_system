@@ -26,3 +26,11 @@ class ApprovalStatus(str, Enum):
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
+
+
+class GrowthRecommendationType(str, Enum):
+    """Signals from Growth agent to determine next routing step."""
+
+    REQUIRES_PLANNING = "requires_planning"
+    REQUIRES_QUICK_FIX = "requires_quick_fix"
+    NO_ACTION = "no_action"

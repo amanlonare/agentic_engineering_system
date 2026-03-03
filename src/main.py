@@ -2,21 +2,22 @@
 Entry point for the Agentic Engineering System.
 """
 
+import uuid
+from datetime import datetime
+
+from langchain_core.messages import HumanMessage
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from src.core.config import settings
 from src.core.graph import build_graph
 from src.core.state import EngineeringState
+from src.core.workspace import WorkspaceManager
 from src.schemas import TriggerContext, TriggerType
 from src.utils.logger import configure_logging
 
 logger = configure_logging()
 
-
-import uuid
-from datetime import datetime
-from src.core.workspace import WorkspaceManager
 
 def main():
     """Application entry point."""
@@ -34,25 +35,25 @@ def main():
                 user_input = input("\n👤 User Request (or 'exit'): ")
                 if user_input.lower() in ["exit", "quit"]:
                     break
-                
+
                 if not user_input.strip():
                     continue
 
                 # 1. Identify the repository from the query
                 repo = wm.identify_repository(user_input)
-                
+
                 # 2. Create a unique thread ID for this specific task
                 thread_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:4]}"
                 config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
 
                 # 3. Initialize state with the dynamic trigger and identified repo
                 initial_state = EngineeringState(
-                    messages=[],
+                    messages=[HumanMessage(content=user_input)],
                     trigger=TriggerContext(
                         type=TriggerType.MANUAL,
                         payload={"description": user_input},
-                        repo_name=repo
-                    )
+                        repo_name=repo,
+                    ),
                 )
 
                 logger.info("🧵 Thread ID: %s", thread_id)
@@ -64,7 +65,9 @@ def main():
                         logger.info(f"--- Finished node: {node_name} ---")
                         # We log internal status, but in a real CLI we might filter this
                         if "next_action" in node_state:
-                            logger.info(f"Supervisor Decision: {node_state['next_action']}")
+                            logger.info(
+                                f"Supervisor Decision: {node_state['next_action']}"
+                            )
 
                 logger.info("✅ Task Processing Complete.")
 

@@ -2,6 +2,7 @@
 The Chief Orchestrator routing logic. Determines the `next_action` in the workflow.
 """
 
+from langchain_core.messages import AIMessage
 from langchain_core.prompts import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
@@ -12,10 +13,10 @@ from langchain_core.prompts import (
 from src.core.state import EngineeringState
 from src.prompts.supervisor import SUPERVISOR_SYSTEM_PROMPT
 from src.providers.chat_models import get_chat_model
-from src.schemas import NodeName, RouteDecision
+from src.schemas import NodeName, RouteDecision, StepStatus
 from src.utils.logger import configure_logging
 
-logger = configure_logging()
+logger = configure_logging("supervisor")
 
 
 def supervisor_node(state: EngineeringState) -> dict:
@@ -26,6 +27,13 @@ def supervisor_node(state: EngineeringState) -> dict:
     logger.info(
         f"👨‍💼 Supervisor evaluating state triggered by: {state.trigger.type if state.trigger else 'unknown'}"
     )
+
+    # If any agent has set an error_message, stop immediately
+    if state.error_message:
+        logger.error(
+            f"🛑 Agent failure detected. Stopping execution. Reason: {state.error_message}"
+        )
+        return {"next_action": NodeName.FINISH}
 
     llm = get_chat_model()
 
@@ -41,14 +49,14 @@ def supervisor_node(state: EngineeringState) -> dict:
     human_prompt = HumanMessagePromptTemplate.from_template(
         "### WORKFLOW CONTEXT\n"
         "Current Trigger: {trigger_type}\n"
-        "Payload: {trigger_payload}\n"
         "Targeted Repository: {repo_name}\n"
-        "Static Task Plan (The Goal): {task_plan}\n"
+        "Static Task Plan:\n{task_plan}\n"
+        "NEXT STEP TO EXECUTE: {next_step_directive}\n"
+        "Completed Step IDs: {completed_step_ids}\n"
         "Approval Status: {approval_status}\n"
         "Validation Report: {validation_report}\n\n"
-        "### RECENT MESSAGES (The Reality of what happened)\n"
-        "Verify the messages below to see what the agents have ACTUALLY done so far. "
-        "If a message says 'testing is required' or 'implementation complete', DO NOT repeat that step.\n"
+        "### RECENT MESSAGES\n"
+        "Verify the messages below to see what the agents have ACTUALLY done.\n"
     )
 
     prompt = ChatPromptTemplate.from_messages(
@@ -56,7 +64,10 @@ def supervisor_node(state: EngineeringState) -> dict:
             system_prompt,
             human_prompt,
             MessagesPlaceholder(variable_name="messages"),
-            ("system", "Based on the Reality (Messages) vs the Goal (Plan), who acts next?"),
+            (
+                "system",
+                "Based on the Plan vs the Completed Steps vs the Messages, who acts next?",
+            ),
         ]
     )
 
@@ -64,12 +75,124 @@ def supervisor_node(state: EngineeringState) -> dict:
     chain = prompt | llm.with_structured_output(RouteDecision)
 
     try:
-        # We explicitly type the result to avoid Pyright errors
+        # 1. Format Plan Checklist for the LLM
+        plan_checklist = "No Technical Plan exists."
+        completed_set = set(state.completed_step_ids or [])
+        if state.task_plan:
+            checklist_items = []
+
+            # Map step_id to latest execution record for display
+            history_map = {rec.step_id: rec for rec in state.execution_history or []}
+
+            for step in state.task_plan.steps:
+                status = "[x]" if step.id in completed_set else "[ ]"
+                record = history_map.get(step.id)
+                outcome = f" | Outcome: {record.outcome[:100]}" if record else ""
+                checklist_items.append(
+                    f"{status} {step.id}: {step.description} (Assigned to: {step.assigned_to}){outcome}"
+                )
+            plan_checklist = "\n".join(checklist_items)
+
+        # 2. Deterministic Next Step Resolver
+        # We first check if ANY recently attempted step failed and needs rework.
+        # This prevents "looping" if a step was mistakenly marked as complete but fails verification.
+        next_step = None
+        if state.task_plan:
+            # Check all steps in the plan that have execution history
+            for step in state.task_plan.steps:
+                last_record = next(
+                    (
+                        rec
+                        for rec in reversed(state.execution_history or [])
+                        if rec.step_id == step.id
+                    ),
+                    None,
+                )
+                if last_record and last_record.status == StepStatus.FAILED:
+                    # Rework needed!
+                    agent_map = {"coder": NodeName.CODER, "ops": NodeName.OPS}
+                    # Count how many times this step has already been reworked
+                    MAX_REWORK_ATTEMPTS = 3
+                    rework_count = sum(
+                        1
+                        for rec in (state.execution_history or [])
+                        if rec.step_id == step.id and rec.status == StepStatus.FAILED
+                    )
+                    if rework_count >= MAX_REWORK_ATTEMPTS:
+                        logger.error(
+                            "🛑 Step %s has failed %d times. Stopping to prevent infinite loop.",
+                            step.id,
+                            rework_count,
+                        )
+                        return {"next_action": NodeName.FINISH}
+
+                    next_node = NodeName.CODER  # Most failures go back to coder
+                    logger.info(
+                        "🔄 Rework detected! Verification for %s failed. Routing back to CODER.",
+                        step.id,
+                    )
+                    rework_msg = (
+                        f"CHIEF ORCHESTRATOR: Verification failed for {step.id}.\n\n"
+                        f"FAILURE DETAILS FROM OPS AGENT:\n{last_record.outcome}\n\n"
+                        f"CODER: Analyse the failure above carefully and fix the root cause. "
+                        f"Do NOT repeat what failed — change the approach based on the error."
+                    )
+                    return {
+                        "next_action": next_node,
+                        "messages": [AIMessage(content=rework_msg)],
+                    }
+
+            # If no rework needed, find the first uncompleted step
+            for step in state.task_plan.steps:
+                if step.id not in completed_set:
+                    # Check dependencies are satisfied
+                    deps_met = all(d in completed_set for d in step.dependencies)
+                    if deps_met:
+                        next_step = step
+                        break
+
+        if next_step:
+            agent_map = {
+                "coder": NodeName.CODER,
+                "ops": NodeName.OPS,
+                "growth": NodeName.GROWTH,
+            }
+            next_node = agent_map.get(next_step.assigned_to.lower(), NodeName.FINISH)
+
+            logger.info("🎯 Deterministic route: %s → %s", next_step.id, next_node)
+            instruction_msg = AIMessage(
+                content=f"Chief Orchestrator: {next_step.assigned_to.upper()}, please execute {next_step.id}: {next_step.description}"
+            )
+            return {
+                "next_action": next_node,
+                "messages": [instruction_msg],
+            }
+
+        # 3. Consult LLM for non-plan transitions (Planning, Finishing, Analysis)
+        # De-duplicate and sort completed steps for the prompt
+        clean_completed_ids = sorted(list(set(state.completed_step_ids or [])))
+
+        logger.info("🔍 Supervisor evaluating state (LLM judgment required)...")
+        if clean_completed_ids:
+            logger.info("✅ Completed steps so far: %s", clean_completed_ids)
+        else:
+            logger.info("🆕 No steps completed yet.")
+
+        # If we reach here, either next_step is None (plan done) or task_plan is None
+        next_step_directive = "ALL STEPS COMPLETE → route to FINISH (unless validation failed and you choose to retry)"
+        if not state.task_plan:
+            next_step_directive = "NO PLAN EXISTS → route to PLANNING for construction."
+
+        # Explicitly invoke the chain
         result = chain.invoke(
             {
                 "trigger_type": state.trigger.type if state.trigger else "unknown",
-                "trigger_payload": str(state.trigger.payload if state.trigger else {}),
-                "task_plan": str(state.task_plan) if state.task_plan else "None",
+                "task_plan": plan_checklist if state.task_plan else "None",
+                "next_step_directive": next_step_directive,
+                "completed_step_ids": str(clean_completed_ids),
+                "execution_history": str(
+                    [h.model_dump() for h in (state.execution_history or [])]
+                ),
                 "validation_report": (
                     str(state.validation_report) if state.validation_report else "None"
                 ),
@@ -83,29 +206,14 @@ def supervisor_node(state: EngineeringState) -> dict:
 
         if isinstance(result, RouteDecision):
             reasoning = result.reasoning
-            # Safely cast the string back to the NodeName enum
-            try:
-                next_node = NodeName(result.next_node)
-            except ValueError:
-                logger.warning(
-                    f"Supervisor returned invalid node name: {result.next_node}. Routing to FINISH."
-                )
-                next_node = NodeName.FINISH
-        elif isinstance(result, dict):
-            reasoning = result.get("reasoning", "No explicit reasoning provided.")
-            raw_node = result.get("next_node", "FINISH")
-            try:
-                next_node = NodeName(raw_node)
-            except ValueError:
-                next_node = NodeName.FINISH
+            next_node = NodeName(result.next_node)
         else:
             next_node = NodeName.FINISH
             reasoning = "Invalid model output, falling back to FINISH."
 
-        logger.info(f"👨‍💼 Supervisor decided: {next_node}")
-        logger.info(f"🧐 Reasoning: {reasoning}")
+        logger.info("👨‍💼 Supervisor decided: %s", next_node)
+        logger.info("🧐 Reasoning: %s", reasoning)
 
-        # We return a dict that represents the updates to the State
         return {"next_action": next_node}
 
     except Exception as e:

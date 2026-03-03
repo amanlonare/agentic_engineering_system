@@ -1,6 +1,27 @@
+from datetime import datetime
+from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
+
+
+class StepStatus(str, Enum):
+    """Execution status of a single step."""
+
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
+class StepExecutionRecord(BaseModel):
+    """A record of a step's execution by an agent."""
+
+    step_id: str
+    status: StepStatus
+    agent: str
+    outcome: str
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
 
 
 class ExecutionStep(BaseModel):
@@ -9,8 +30,16 @@ class ExecutionStep(BaseModel):
     id: str = Field(description="Short ID (e.g., STEP-1)")
     description: str = Field(description="What needs to be done")
     assigned_to: str = Field(description="Agent responsible (e.g., 'coder')")
+    target_repo: Optional[str] = Field(
+        default=None,
+        description="The repository name involved in this step (e.g., 'mobile-app')",
+    )
     dependencies: List[str] = Field(
         default_factory=list, description="IDs of steps that must complete first"
+    )
+    verification_criteria: Optional[str] = Field(
+        default=None,
+        description="Specific testing/validation details for this step (e.g., 'Run pytest and verify output')",
     )
 
 
@@ -20,6 +49,10 @@ class TechnicalPlan(BaseModel):
     title: str = Field(description="A descriptive title for the plan")
     summary: str = Field(description="High-level overview of the proposed solution")
     steps: List[ExecutionStep] = Field(description="Ordered list of execution steps")
+    definition_of_done: List[str] = Field(
+        default_factory=list,
+        description="Checklist of items that must be verified by the Ops agent",
+    )
     estimated_risk: str = Field(
         default="low", description="Risk assessment (low, medium, high)"
     )

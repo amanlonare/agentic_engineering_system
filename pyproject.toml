@@ -16,4 +16,5 @@ dependencies = [
     "sqlmodel>=0.0.37",
     "isort>=8.0.0",
     "black>=26.1.0",
+    "langchain>=1.2.10",
 ]
