@@ -45,7 +45,25 @@ class WorkspaceManager:
     def identify_repository(self, task_description: str) -> Optional[str]:
         """
         Identifies the most relevant repository for a given task description.
+        Prioritizes explicit keywords and repository names before falling back to semantic search.
         """
+        desc_lower = task_description.lower()
+
+        # 1. Deterministic Keywords
+        # If the user mentions "Agentic Team", route to the testing sandbox
+        if "agentic team" in desc_lower or "agent team" in desc_lower:
+            logger.info("🎯 Routing to 'testing_agentic_engineering_team' via explicit keyword.")
+            return "testing_agentic_engineering_team"
+
+        # 2. Exact Repo Name Matching
+        # If any folder name in .context is mentioned exactly, pick it.
+        if os.path.exists(self.context_dir):
+            for repo_name in os.listdir(self.context_dir):
+                if repo_name.lower() in desc_lower:
+                    logger.info("🎯 Routing to '%s' via exact folder name match.", repo_name)
+                    return repo_name
+
+        # 3. Semantic Fallback
         results = self.memory.retrieve_relevant_memories(task_description, k=1)
         if results:
             repo_name = results[0].metadata.get("repo_name")

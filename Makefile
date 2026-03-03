@@ -1,5 +1,8 @@
 .PHONY: format lint clean ingest server install init-db reset-db run
 
+server:
+	uv run python -m src.api.server
+
 install:
 	uv sync
 

@@ -10,6 +10,9 @@ class GitHubIssuePayload(BaseModel):
     issue_number: int = Field(description="The GitHub issue number")
     title: str = Field(description="Title of the issue")
     body: Optional[str] = Field(default=None, description="Markdown body of the issue")
+    labels: list[str] = Field(default_factory=list, description="List of issue labels")
+    action: str = Field(default="opened", description="Action performed: opened, labeled, etc.")
+    sender: str = Field(default="", description="GitHub username of the person who triggered the event")
 
 
 class CloudWatchPayload(BaseModel):
