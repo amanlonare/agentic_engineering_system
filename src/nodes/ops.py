@@ -187,7 +187,22 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
         if actual_command_failure:
             report.success = False
 
-        # 5. Populate Execution History
+        # 5. Extract Branch Name (if a git push occurred)
+        branch_name = None
+        for msg in messages:
+            if isinstance(msg, ToolMessage) and "git push" in str(msg.content):
+                pass
+
+        # Look for the final git branch name in the LLM's final response
+        last_content = str(getattr(messages[-1], "content", ""))
+        if report.success and "feature/issue-" in last_content:
+            import re
+
+            match = re.search(r"feature/issue-[\w\-]+", last_content)
+            if match:
+                branch_name = match.group(0)
+
+        # 6. Populate Execution History
         if completed_ids and current_step:
             status = StepStatus.COMPLETED if report.success else StepStatus.FAILED
             # Include the full command failure output so the Supervisor can relay it to the Coder
@@ -204,7 +219,7 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
                 )
             ]
 
-        return {
+        response_payload: Dict[str, Any] = {
             # Only return the FINAL summary message to shared state, not all internal tool calls.
             # This prevents state.messages from growing unboundedly with every tool call made.
             "messages": [messages[-1]],
@@ -212,6 +227,18 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
             "completed_step_ids": completed_ids if report.success else [],
             "execution_history": history,
         }
+
+        if branch_name:
+            # We use a state update for branch_name if the global state schema supports it,
+            # or append it to the outcome history. Since EngineeringState currently has no
+            # explicit `branch_name` field, we will inject it into the final message instead.
+            last_msg_content = str(getattr(messages[-1], "content", ""))
+            if isinstance(last_msg_content, str):
+                messages[-1].content = (
+                    last_msg_content + f"\n\n[STATE_INJECT:BRANCH:{branch_name}]"
+                )
+
+        return response_payload
     except Exception:
         logger.exception("Ops Agent failed unexpectedly")
         return {

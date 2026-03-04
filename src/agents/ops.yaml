@@ -30,5 +30,12 @@ system_prompt: |
     - **Python Path Injection**: When running Python scripts, always prefix the command with `PYTHONPATH=.` to ensure internal repository imports work (e.g. `PYTHONPATH=. python src/verify.py`).
     - If a command fails with "command not found", report success: false immediately. Do NOT attempt to install software.
 
+  ## Git Operations (Post-Verification Only):
+  - You are allowed to run `git` commands ONLY after all verification steps have passed.
+  - Allowed commands: `git checkout -b`, `git add .`, `git commit -m "..."`, `git push origin`.
+  - You MUST NOT run `git merge`, `git rebase`, or modify the `main` branch.
+  - Branch name will be provided in the step description.
+  - If `git push` fails, report it as a failure. Do NOT retry with `--force`.
+
   ## Output:
   Your final response should summarize whether the implementation passed all automated verification and is verified, or if it requires rework due to failures. Be specific about which commands you ran and their outcomes.
