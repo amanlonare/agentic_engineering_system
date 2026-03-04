@@ -61,3 +61,24 @@ INFO: Supervisor decided: NodeName.FINISH (Reason: All tests passed)
 
 ✅ Task Processing Complete.
 ```
+
+## ⚙️ Configuration
+
+The system uses a layered YAML configuration system located in the `config/` directory.
+
+### Switching Environments
+The environment is determined by the `APP_ENV` variable. You can set it in two ways:
+
+1.  **In `.env` file** (Recommended):
+    ```env
+    APP_ENV=prod
+    ```
+2.  **Via shell**:
+    ```bash
+    export APP_ENV=prod
+    ```
+
+### How it works
+1. **`default.yaml`** is loaded first for baseline settings.
+2. **`{APP_ENV}.yaml`** is loaded next, overriding specific values.
+3. **`.env`** is used for sensitive secrets like `OPENAI_API_KEY` and the `APP_ENV` toggle.

@@ -11,14 +11,13 @@ from langchain_core.prompts import (
 )
 
 from src.core.state import EngineeringState
+from src.core.config_manager import app_config, config_manager
 from src.prompts.supervisor import SUPERVISOR_SYSTEM_PROMPT
-from src.providers.chat_models import get_chat_model
 from src.schemas import GrowthRecommendationType, NodeName, RouteDecision, StepStatus
 from src.utils.logger import configure_logging
 
-logger = configure_logging("supervisor")
 
-MAX_FOLLOW_UP_DEPTH = 2
+logger = configure_logging("supervisor")
 
 
 def _build_follow_up_prompt(recommendations, depth: int = 1) -> str:
@@ -51,7 +50,7 @@ def _check_growth_follow_up(state: EngineeringState, logger):
         r for r in (state.growth_recommendations or [])
         if r.recommendation_type != GrowthRecommendationType.NO_ACTION
     ]
-    if actionable and state.follow_up_depth < MAX_FOLLOW_UP_DEPTH:
+    if actionable and state.follow_up_depth < app_config.workflow.max_follow_up_depth:
         logger.info(
             "📈 %d actionable growth recommendation(s) found. Creating follow-up plan (depth %d).",
             len(actionable),
@@ -79,14 +78,32 @@ def supervisor_node(state: EngineeringState) -> dict:
         f"👨‍💼 Supervisor evaluating state triggered by: {state.trigger.type if state.trigger else 'unknown'}"
     )
 
+    # 0. Lightweight Detection (Heuristic)
+    # If it's a new task (no messages yet or just the system/human trigger) and seems simple.
+    human_messages = [m for m in state.messages if m.type == "human"]
+    if human_messages and not state.task_plan:
+        last_msg = human_messages[-1].content
+        query = last_msg.lower() if isinstance(last_msg, str) else ""
+        # Heuristic: No repo identifier AND (short query OR simple keywords)
+
+        simple_keywords = ["print", "even numbers", "odd numbers", "hello world", "algorithm", "simple"]
+        has_simple_kw = any(kw in query for kw in simple_keywords)
+        no_repo = state.trigger.repo_name == "General" if state.trigger else True
+        
+        if no_repo or has_simple_kw:
+            logger.info("⚡ Lightweight task detected. Setting is_lightweight=True.")
+            return {"is_lightweight": True, "next_action": NodeName.PLANNING}
+
     # If any agent has set an error_message, stop immediately
+
     if state.error_message:
         logger.error(
             f"🛑 Agent failure detected. Stopping execution. Reason: {state.error_message}"
         )
         return {"next_action": NodeName.FINISH}
 
-    llm = get_chat_model()
+    llm = config_manager.get_agent_llm("supervisor")
+
 
     if not llm:
         # Mock logic to test routing: If no messages from agents yet, go to planning. Otherwise FINISH.
@@ -167,13 +184,12 @@ def supervisor_node(state: EngineeringState) -> dict:
                         "growth": NodeName.GROWTH,
                     }
                     # Count how many times this step has already been reworked
-                    MAX_REWORK_ATTEMPTS = 3
                     rework_count = sum(
                         1
                         for rec in (state.execution_history or [])
                         if rec.step_id == step.id and rec.status == StepStatus.FAILED
                     )
-                    if rework_count >= MAX_REWORK_ATTEMPTS:
+                    if rework_count >= app_config.workflow.max_rework_attempts:
                         logger.error(
                             "🛑 Step %s has failed %d times. Stopping to prevent infinite loop.",
                             step.id,

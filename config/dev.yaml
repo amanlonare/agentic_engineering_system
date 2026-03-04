@@ -1,0 +1,37 @@
+# 🛠️ Development Configuration
+# Overrides for local development and testing
+
+llm:
+  provider: "openai"
+  default_model: "gpt-4o-mini"
+  default_temperature: 0.1 # Slightly more creative for dev
+  max_retries: 3           # Fewer retries to fail fast in dev
+  agents:
+    planner:
+      model: "gpt-4o-mini"
+      temperature: 0.0
+    coder:
+      model: "gpt-4o-mini"
+      temperature: 0.0
+    ops:
+      model: "gpt-4o-mini"
+      temperature: 0.0
+    growth:
+      model: "gpt-4o-mini"
+      temperature: 0.0
+    supervisor:
+      model: "gpt-4o-mini"
+      temperature: 0.0
+
+agents:
+  coder:
+    max_tool_calls: 20
+    max_duplicate_rounds: 3
+  ops:
+    max_tool_calls: 10
+  growth:
+    max_tool_calls: 10
+
+workflow:
+  max_rework_attempts: 3
+  max_follow_up_depth: 2

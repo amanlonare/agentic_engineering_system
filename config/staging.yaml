@@ -1,0 +1,37 @@
+# 🏗️ Staging Configuration
+# Mirrored to production but potentially using smaller models for cost control
+
+llm:
+  provider: "openai"
+  default_model: "gpt-4o"
+  default_temperature: 0.0
+  max_retries: 5
+  agents:
+    planner:
+      model: "gpt-4o"
+      temperature: 0.0
+    coder:
+      model: "gpt-4o-mini" # Use mini in staging to save costs
+      temperature: 0.0
+    ops:
+      model: "gpt-4o"
+      temperature: 0.0
+    growth:
+      model: "gpt-4o"
+      temperature: 0.0
+    supervisor:
+      model: "gpt-4o"
+      temperature: 0.0
+
+agents:
+  coder:
+    max_tool_calls: 20
+    max_duplicate_rounds: 3
+  ops:
+    max_tool_calls: 10
+  growth:
+    max_tool_calls: 10
+
+workflow:
+  max_rework_attempts: 3
+  max_follow_up_depth: 2

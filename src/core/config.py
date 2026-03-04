@@ -11,20 +11,15 @@ class Settings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
-    # LLM Settings
+    # LLM Settings (Secrets only)
     OPENAI_API_KEY: str | None = None
+    APP_ENV: str = "dev"
 
-    PRIMARY_MODEL_PROVIDER: str = "openai"
-    OPENAI_MODEL_NAME: str = "gpt-4o-mini"
-
-    # Infrastructure
+    # Infrastructure (Defaults sourced from YAML config)
     DATABASE_URL: str = "sqlite:///./engineering_agents.db"
-
-    # API Server & Webhooks
-    GITHUB_WEBHOOK_SECRET: str | None = None
-    GITHUB_TOKEN: str | None = None
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
+
 
 
 settings = Settings()

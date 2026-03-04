@@ -8,14 +8,15 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
-from langchain_openai import ChatOpenAI
 
 from src.core.config import settings
+from src.core.config_manager import app_config, config_manager
 from src.core.state import EngineeringState
 from src.schemas import StepExecutionRecord, StepStatus
 from src.tools.codebase_tools import get_restricted_tools
 from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.utils.logger import configure_logging
+from src.core.config_manager import app_config, config_manager
 
 logger = configure_logging("coder")
 
@@ -59,10 +60,9 @@ def _walk_tree(path: str, prefix: str, lines: list, current_depth: int, max_dept
         pass
 
 
-MAX_TOOL_CALLS = 20
-
 
 def coder_node(state: EngineeringState) -> Dict[str, Any]:
+
     """
     Coder Agent: Executes code changes using restricted tools.
     """
@@ -194,9 +194,12 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
     # 2. Setup Persona and Tools
     persona = load_agent_persona("coder")
     system_prompt = build_system_prompt(persona).replace("{repo_name}", repo)
+    if state.is_lightweight:
+        system_prompt = "THIS IS A LIGHTWEIGHT task. Follow the Lightweight Task Protocol.\n\n" + system_prompt
+
 
     tools = get_restricted_tools(repo)
-    llm = ChatOpenAI(model=settings.OPENAI_MODEL_NAME, temperature=0.0, max_retries=5)
+    llm = config_manager.get_agent_llm("coder")
     llm_with_tools = llm.bind_tools(tools)
 
     # 3. Build Messages
@@ -213,7 +216,10 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
             str, str
         ] = {}  # Track ALL calls: "tool(args)" -> result
         consecutive_dup_rounds = 0  # Force-break after N all-duplicate rounds
-        MAX_DUP_ROUNDS = 3
+        # Configurable limits
+        agent_cfg = app_config.agents.get("coder")
+        MAX_TOOL_CALLS = agent_cfg.max_tool_calls if agent_cfg else 20
+        MAX_DUP_ROUNDS = agent_cfg.max_duplicate_rounds if agent_cfg else 3
 
         while tool_call_count < MAX_TOOL_CALLS:
             response = llm_with_tools.invoke(messages)
@@ -275,7 +281,8 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
             # FORCE-BREAK: If all calls in this round were duplicates, count it
             if all_duplicates_this_round:
                 consecutive_dup_rounds += 1
-                if consecutive_dup_rounds >= MAX_DUP_ROUNDS:
+                if MAX_DUP_ROUNDS is not None and consecutive_dup_rounds >= MAX_DUP_ROUNDS:
+
                     logger.warning(
                         "🛑 Force-breaking loop: %d consecutive all-duplicate rounds.",
                         MAX_DUP_ROUNDS,

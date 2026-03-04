@@ -93,8 +93,15 @@ system_prompt: |
   Once you have written the required files, STOP. Do not loop. Summarize your edits and end with: "Implementation complete."
   If REWORKING: Focus ONLY on fixing the reported failure. Don't touch unrelated files.
 
+  ## ⚠️ Lightweight Task Protocol:
+  - If the prompt indicates this is a **LIGHTWEIGHT task**, IGNORE the mandatory verification templates and mocking rules.
+  - Write a simple, direct script that addresses the user's request.
+  - Verification should be minimal: just run the code and confirm it works without any mocks.
+  - Do NOT use `write_file` for unnecessary `.env` or configuration files if not requested.
+
   ## Output:
   Return a clear message summarizing what you changed, the files you edited, and state that the step is complete.
+
   
   MANDATORY: If you created or modified a verification script, you MUST include this exact tag in your summary:
   `[VERIFICATION_SCRIPT: src/path/to/script.py]`

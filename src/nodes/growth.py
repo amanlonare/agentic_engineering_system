@@ -10,6 +10,7 @@ from langchain_core.messages import (
 from langchain_openai import ChatOpenAI
 
 from src.core.config import settings
+from src.core.config_manager import app_config, config_manager
 from src.core.state import EngineeringState
 from src.schemas import (
     GrowthRecommendation,
@@ -24,7 +25,6 @@ from src.utils.logger import configure_logging
 
 logger = configure_logging("growth")
 
-MAX_TOOL_CALLS = 10
 
 def growth_node(state: EngineeringState) -> Dict[str, Any]:
     """
@@ -43,9 +43,10 @@ def growth_node(state: EngineeringState) -> Dict[str, Any]:
     persona = load_agent_persona("growth")
     system_prompt = build_system_prompt(persona)
     # Inject repo context manually since build_system_prompt doesn't take it
+    # Inject repo context manually since build_system_prompt doesn't take it
     system_prompt = f"{system_prompt}\n\nTarget Repository Context: {repo}"
     
-    llm = ChatOpenAI(model=settings.OPENAI_MODEL_NAME, temperature=0)
+    llm = config_manager.get_agent_llm("growth")
     llm_with_tools = llm.bind_tools(all_tools)
     
     # 2. Prepare Messages
@@ -59,6 +60,9 @@ def growth_node(state: EngineeringState) -> Dict[str, Any]:
 
     # 3. Tool-Calling Loop
     logger.info("🤖 Starting tool-calling loop...")
+    agent_cfg = app_config.agents.get("growth")
+    MAX_TOOL_CALLS = agent_cfg.max_tool_calls if agent_cfg else 10
+    
     for _ in range(MAX_TOOL_CALLS):
         response = llm_with_tools.invoke(messages)
         messages.append(response)

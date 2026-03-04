@@ -83,3 +83,9 @@ class EngineeringState(BaseModel):
         default=None,
         description="If set, an agent has failed. Supervisor should FINISH.",
     )
+
+    is_lightweight: bool = Field(
+        default=False,
+        description="If True, the task is simple and agents should use simplified prompts (e.g., no mocking).",
+    )
+

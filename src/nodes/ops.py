@@ -10,6 +10,7 @@ from langchain_core.messages import (
 from langchain_openai import ChatOpenAI
 
 from src.core.config import settings
+from src.core.config_manager import app_config, config_manager
 from src.core.state import EngineeringState
 from src.schemas import StepExecutionRecord, StepStatus, TestReport
 from src.tools.codebase_tools import get_ops_tools
@@ -17,8 +18,6 @@ from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.utils.logger import configure_logging
 
 logger = configure_logging("ops")
-
-MAX_TOOL_CALLS = 10
 
 
 def ops_node(state: EngineeringState) -> Dict[str, Any]:
@@ -92,7 +91,7 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
     system_prompt = build_system_prompt(persona)
     tools = get_ops_tools(repo)
 
-    llm = ChatOpenAI(model=settings.OPENAI_MODEL_NAME, temperature=0.0, max_retries=5)
+    llm = config_manager.get_agent_llm("ops")
     llm_with_tools = llm.bind_tools(tools)
 
     messages: List[BaseMessage] = [SystemMessage(content=system_prompt)]
@@ -105,6 +104,10 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
         # 3. Tool-Calling Loop
         tool_call_count = 0
         turn_tool_history: Dict[str, str] = {}  # Track ALL calls in this turn
+
+        # Configurable limits
+        agent_cfg = app_config.agents.get("ops")
+        MAX_TOOL_CALLS = agent_cfg.max_tool_calls if agent_cfg else 10
 
         while tool_call_count < MAX_TOOL_CALLS:
             response = llm_with_tools.invoke(messages)
@@ -156,9 +159,8 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
 
         # 4. Generate Structured TestReport (Phase 2)
         logger.info("📋 Finalizing structured TestReport...")
-        structured_llm = ChatOpenAI(
-            model=settings.OPENAI_MODEL_NAME, temperature=0.0, max_retries=5
-        ).with_structured_output(TestReport)
+        structured_llm = config_manager.get_agent_llm("ops").with_structured_output(TestReport)
+
 
         # Invoke returns TestReport as requested by with_structured_output
         report = cast(
