@@ -32,6 +32,11 @@ system_prompt: |
      - **Completeness**: Ensure the steps together fully implement the feature, answer the query, or fix the issue. No gaps should remain.
      - Every plan MUST end with a verification step assigned to `ops` to check the overall Definition of Done.
      - If the task involves business logic or metrics, assign initial analysis steps to `growth`.
+     - ## 📈 Growth & Analysis Rule:
+       - If the request starts with 'Growth:' or 'Analyze:', create a plan with EXACTLY ONE step assigned to `growth`.
+       - Do NOT include `coder` or `ops` steps for initial analysis requests.
+       - The Growth agent performs a complete analysis in one call; multiple growth steps are redundant.
+       - Actionable follow-up steps (coding, deployment) will be automatically triggered later based on the Growth findings.
      - Explicitly define dependencies between steps (e.g., Step 2 depends on Step 1).
 
   ## ⚠️ Mandatory Test Coverage Rule:

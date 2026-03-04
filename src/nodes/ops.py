@@ -77,6 +77,9 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
         instructions = (
             f"Current Plan Step [{current_step.id}]: {current_step.description}"
         )
+        if state.verification_scripts:
+            instructions += f"\nVerification Scripts to run: {', '.join(state.verification_scripts)}"
+            
         if current_step.verification_criteria:
             instructions += (
                 f"\nVerification Criteria: {current_step.verification_criteria}"
@@ -170,15 +173,23 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
             ),
         )
 
-        # CRITICAL FIX: Override LLM "hallucination" of success if we saw a non-zero exit code in messages
+        # CRITICAL FIX: Override LLM "hallucination" of success if we saw a non-fatal command failure
         actual_command_failure = False
         failure_details = ""
         for msg in messages:
             if isinstance(msg, ToolMessage) and "Exit Code:" in msg.content:
+                content = str(msg.content)
+                # Ignore Exit Code 128 (branch already exists)
+                if "Exit Code: 128" in content and "fatal: a branch named" in content:
+                    continue
+                # Ignore Exit Code 1 (nothing to commit)
+                if "Exit Code: 1" in content and "nothing to commit, working tree clean" in content:
+                    continue
+                    
                 # Basic check for non-zero exit code
-                if "Exit Code: 0" not in msg.content:
+                if "Exit Code: 0" not in content:
                     actual_command_failure = True
-                    failure_details = msg.content  # Capture the full STDERR + exit code
+                    failure_details = content  # Capture the full STDERR + exit code
                     logger.warning(
                         "🚨 Detected actual command failure in tool outputs. Overriding report.success to False."
                     )

@@ -7,6 +7,7 @@ class TriggerType(str, Enum):
     GITHUB_ISSUE = "github_issue"
     CLOUDWATCH_ALERT = "cloudwatch_alert"
     MANUAL = "manual"
+    GROWTH_RECOMMENDATION = "growth_recommendation"
 
 
 class NodeName(str, Enum):

@@ -241,8 +241,8 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
                         ToolMessage(
                             tool_call_id=tool_call["id"] or "",
                             content=(
-                                f"⚠️ DUPLICATE: You already called this. Result was: {prev_result[:200]}\n"
-                                f"Do NOT repeat. Use write_file to implement your code NOW."
+                                f"⚠️ SUCCESS: You already called this and it succeeded (Result: {prev_result[:100]}...).\n"
+                                f"Do NOT repeat the same write_file. If you're done, summarize and finish."
                             ),
                         )
                     )
@@ -298,11 +298,29 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
             # NOTE: We still return history so the Supervisor can see the Coder "attempted" rework.
             # This prevents the supervisor from re-routing here infinitely.
 
+        # 5. Extract Verification Scripts from final message (Manual tags + Automatic detection)
+        import re
+        final_content = str(messages[-1].content)
+        script_matches = re.findall(r"\[VERIFICATION_SCRIPT:\s*([a-zA-Z0-9_\-\./]+)\]", final_content)
+        
+        # Fallback: Scan ToolMessages for any 'write_file' to a path containing 'verify' or 'test'
+        for msg in messages:
+            if isinstance(msg, AIMessage) and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    if tc["name"] == "write_file":
+                        path = tc["args"].get("path", "")
+                        if ("verify" in path.lower() or "test" in path.lower()) and path.endswith(".py"):
+                            # Clean the path to be relative to .context/{repo}/ for Ops
+                            clean_path = path.replace(f".context/{repo}/", "")
+                            if clean_path not in script_matches:
+                                script_matches.append(clean_path)
+        
         return {
             # Only return the FINAL summary message to shared state, not all internal tool calls.
             "messages": [messages[-1]],
             "completed_step_ids": completed_ids,
             "execution_history": history,  # Always return history, even if truncated by tool cap
+            "verification_scripts": script_matches,
         }
 
     except Exception:

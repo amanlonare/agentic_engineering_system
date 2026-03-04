@@ -15,3 +15,9 @@ class GrowthRecommendation(BaseModel):
     suggested_repo: str = Field(
         description="The repository that needs modification, if any"
     )
+    drift_detected: bool = False
+    false_positive_rate: float | None = None
+    affected_segments: list[str] = []
+    suggested_action: str | None = Field(
+        default=None, description="Suggested corrective action based on the analysis, if any"
+    )

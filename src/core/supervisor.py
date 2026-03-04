@@ -13,10 +13,61 @@ from langchain_core.prompts import (
 from src.core.state import EngineeringState
 from src.prompts.supervisor import SUPERVISOR_SYSTEM_PROMPT
 from src.providers.chat_models import get_chat_model
-from src.schemas import NodeName, RouteDecision, StepStatus
+from src.schemas import GrowthRecommendationType, NodeName, RouteDecision, StepStatus
 from src.utils.logger import configure_logging
 
 logger = configure_logging("supervisor")
+
+MAX_FOLLOW_UP_DEPTH = 2
+
+
+def _build_follow_up_prompt(recommendations, depth: int = 1) -> str:
+    """Build a context prompt summarizing Growth findings for the follow-up Planning agent."""
+    lines = [
+        "GROWTH AGENT FINDINGS — Create an ACTION plan to fix these issues.",
+        f"IMPORTANT: Use step IDs with prefix 'FU{depth}-' (e.g., FU{depth}-STEP-1, FU{depth}-STEP-2) to avoid ID collisions.",
+        "This is a follow-up plan. The analysis is already done — do NOT assign steps to `growth`.",
+        "Assign steps to `coder` to fix code and `ops` to verify the fixes.",
+        "MANDATORY: Instructions and verification scripts MUST use absolute imports (e.g., `from src.model.predictor import ...`).",
+        "",
+    ]
+    for i, r in enumerate(recommendations, 1):
+        lines.append(f"{i}. [{r.recommendation_type.value}] {r.analysis[:300]}")
+        if r.affected_segments:
+            lines.append(f"   Affected: {', '.join(r.affected_segments)}")
+        if r.suggested_action:
+            lines.append(f"   Action: {r.suggested_action}")
+        if r.suggested_repo:
+            lines.append(f"   Target Repo: {r.suggested_repo}")
+        if r.drift_detected:
+            lines.append(f"   ⚠️ Model drift detected (false positive rate: {r.false_positive_rate})")
+    return "\n".join(lines)
+
+
+def _check_growth_follow_up(state: EngineeringState, logger):
+    """Check if accumulated growth recommendations warrant a follow-up plan.
+    Returns a state update dict if follow-up is needed, None otherwise."""
+    actionable = [
+        r for r in (state.growth_recommendations or [])
+        if r.recommendation_type != GrowthRecommendationType.NO_ACTION
+    ]
+    if actionable and state.follow_up_depth < MAX_FOLLOW_UP_DEPTH:
+        logger.info(
+            "📈 %d actionable growth recommendation(s) found. Creating follow-up plan (depth %d).",
+            len(actionable),
+            state.follow_up_depth + 1,
+        )
+        follow_up_prompt = _build_follow_up_prompt(actionable, state.follow_up_depth + 1)
+        return {
+            "next_action": NodeName.PLANNING,
+            "task_plan": None,
+            "follow_up_depth": state.follow_up_depth + 1,
+            "follow_up_context": follow_up_prompt,
+            "growth_recommendations": [],
+            "verification_scripts": [],
+            "messages": [AIMessage(content=follow_up_prompt)],
+        }
+    return None
 
 
 def supervisor_node(state: EngineeringState) -> dict:
@@ -110,7 +161,11 @@ def supervisor_node(state: EngineeringState) -> dict:
                 )
                 if last_record and last_record.status == StepStatus.FAILED:
                     # Rework needed!
-                    agent_map = {"coder": NodeName.CODER, "ops": NodeName.OPS}
+                    agent_map = {
+                        "coder": NodeName.CODER,
+                        "ops": NodeName.OPS,
+                        "growth": NodeName.GROWTH,
+                    }
                     # Count how many times this step has already been reworked
                     MAX_REWORK_ATTEMPTS = 3
                     rework_count = sum(
@@ -124,17 +179,28 @@ def supervisor_node(state: EngineeringState) -> dict:
                             step.id,
                             rework_count,
                         )
+                        # Check if Growth has actionable recommendations before giving up
+                        follow_up = _check_growth_follow_up(state, logger)
+                        if follow_up:
+                            return follow_up
                         return {"next_action": NodeName.FINISH}
 
-                    next_node = NodeName.CODER  # Most failures go back to coder
+                    if step.assigned_to.lower() == "ops":
+                        next_node = NodeName.CODER
+                    else:
+                        next_node = agent_map.get(
+                            step.assigned_to.lower(), NodeName.CODER
+                        )
+                    
                     logger.info(
-                        "🔄 Rework detected! Verification for %s failed. Routing back to CODER.",
+                        "🔄 Rework detected! Verification for %s failed. Routing back to %s.",
                         step.id,
+                        next_node,
                     )
                     rework_msg = (
                         f"CHIEF ORCHESTRATOR: Verification failed for {step.id}.\n\n"
                         f"FAILURE DETAILS FROM OPS AGENT:\n{last_record.outcome}\n\n"
-                        f"CODER: Analyse the failure above carefully and fix the root cause. "
+                        f"{step.assigned_to.upper()}: Analyse the failure above carefully and fix the root cause. "
                         f"Do NOT repeat what failed — change the approach based on the error."
                     )
                     return {
@@ -213,6 +279,12 @@ def supervisor_node(state: EngineeringState) -> dict:
 
         logger.info("👨‍💼 Supervisor decided: %s", next_node)
         logger.info("🧐 Reasoning: %s", reasoning)
+
+        # If finishing, check for pending growth recommendations
+        if next_node == NodeName.FINISH:
+            follow_up = _check_growth_follow_up(state, logger)
+            if follow_up:
+                return follow_up
 
         return {"next_action": next_node}
 

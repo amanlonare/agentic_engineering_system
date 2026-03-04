@@ -39,7 +39,10 @@ def planning_node(state: EngineeringState) -> Dict[str, Any]:
         m.content for m in state.messages if isinstance(m, HumanMessage) and m.content
     ]
 
-    if user_messages:
+    if state.follow_up_context:
+        task_description = state.follow_up_context
+        logger.info("📈 Using follow-up context from Growth recommendations as task description.")
+    elif user_messages:
         task_description = user_messages[
             0
         ]  # Use the FIRST human message (original request)
