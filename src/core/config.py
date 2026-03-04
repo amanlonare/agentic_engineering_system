@@ -13,6 +13,7 @@ class Settings(BaseSettings):
 
     # LLM Settings (Secrets only)
     OPENAI_API_KEY: str | None = None
+    GITHUB_TOKEN: str | None = None
     GITHUB_WEBHOOK_SECRET: str | None = None
     APP_ENV: str = "dev"
 
