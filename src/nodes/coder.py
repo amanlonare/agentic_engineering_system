@@ -9,14 +9,12 @@ from langchain_core.messages import (
     ToolMessage,
 )
 
-from src.core.config import settings
 from src.core.config_manager import app_config, config_manager
 from src.core.state import EngineeringState
 from src.schemas import StepExecutionRecord, StepStatus
 from src.tools.codebase_tools import get_restricted_tools
 from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.utils.logger import configure_logging
-from src.core.config_manager import app_config, config_manager
 
 logger = configure_logging("coder")
 
@@ -60,9 +58,7 @@ def _walk_tree(path: str, prefix: str, lines: list, current_depth: int, max_dept
         pass
 
 
-
 def coder_node(state: EngineeringState) -> Dict[str, Any]:
-
     """
     Coder Agent: Executes code changes using restricted tools.
     """
@@ -195,8 +191,10 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
     persona = load_agent_persona("coder")
     system_prompt = build_system_prompt(persona).replace("{repo_name}", repo)
     if state.is_lightweight:
-        system_prompt = "THIS IS A LIGHTWEIGHT task. Follow the Lightweight Task Protocol.\n\n" + system_prompt
-
+        system_prompt = (
+            "THIS IS A LIGHTWEIGHT task. Follow the Lightweight Task Protocol.\n\n"
+            + system_prompt
+        )
 
     tools = get_restricted_tools(repo)
     llm = config_manager.get_agent_llm("coder")
@@ -281,8 +279,10 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
             # FORCE-BREAK: If all calls in this round were duplicates, count it
             if all_duplicates_this_round:
                 consecutive_dup_rounds += 1
-                if MAX_DUP_ROUNDS is not None and consecutive_dup_rounds >= MAX_DUP_ROUNDS:
-
+                if (
+                    MAX_DUP_ROUNDS is not None
+                    and consecutive_dup_rounds >= MAX_DUP_ROUNDS
+                ):
                     logger.warning(
                         "🛑 Force-breaking loop: %d consecutive all-duplicate rounds.",
                         MAX_DUP_ROUNDS,
@@ -307,21 +307,26 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
 
         # 5. Extract Verification Scripts from final message (Manual tags + Automatic detection)
         import re
+
         final_content = str(messages[-1].content)
-        script_matches = re.findall(r"\[VERIFICATION_SCRIPT:\s*([a-zA-Z0-9_\-\./]+)\]", final_content)
-        
+        script_matches = re.findall(
+            r"\[VERIFICATION_SCRIPT:\s*([a-zA-Z0-9_\-\./]+)\]", final_content
+        )
+
         # Fallback: Scan ToolMessages for any 'write_file' to a path containing 'verify' or 'test'
         for msg in messages:
             if isinstance(msg, AIMessage) and msg.tool_calls:
                 for tc in msg.tool_calls:
                     if tc["name"] == "write_file":
                         path = tc["args"].get("path", "")
-                        if ("verify" in path.lower() or "test" in path.lower()) and path.endswith(".py"):
+                        if (
+                            "verify" in path.lower() or "test" in path.lower()
+                        ) and path.endswith(".py"):
                             # Clean the path to be relative to .context/{repo}/ for Ops
                             clean_path = path.replace(f".context/{repo}/", "")
                             if clean_path not in script_matches:
                                 script_matches.append(clean_path)
-        
+
         return {
             # Only return the FINAL summary message to shared state, not all internal tool calls.
             "messages": [messages[-1]],

@@ -7,9 +7,7 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
-from langchain_openai import ChatOpenAI
 
-from src.core.config import settings
 from src.core.config_manager import app_config, config_manager
 from src.core.state import EngineeringState
 from src.schemas import StepExecutionRecord, StepStatus, TestReport
@@ -78,7 +76,7 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
         )
         if state.verification_scripts:
             instructions += f"\nVerification Scripts to run: {', '.join(state.verification_scripts)}"
-            
+
         if current_step.verification_criteria:
             instructions += (
                 f"\nVerification Criteria: {current_step.verification_criteria}"
@@ -159,8 +157,9 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
 
         # 4. Generate Structured TestReport (Phase 2)
         logger.info("📋 Finalizing structured TestReport...")
-        structured_llm = config_manager.get_agent_llm("ops").with_structured_output(TestReport)
-
+        structured_llm = config_manager.get_agent_llm("ops").with_structured_output(
+            TestReport
+        )
 
         # Invoke returns TestReport as requested by with_structured_output
         report = cast(
@@ -185,9 +184,12 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
                 if "Exit Code: 128" in content and "fatal: a branch named" in content:
                     continue
                 # Ignore Exit Code 1 (nothing to commit)
-                if "Exit Code: 1" in content and "nothing to commit, working tree clean" in content:
+                if (
+                    "Exit Code: 1" in content
+                    and "nothing to commit, working tree clean" in content
+                ):
                     continue
-                    
+
                 # Basic check for non-zero exit code
                 if "Exit Code: 0" not in content:
                     actual_command_failure = True

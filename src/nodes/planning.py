@@ -1,10 +1,8 @@
 from typing import Any, Dict
 
 from langchain_core.messages import AIMessage
-from langchain_openai import ChatOpenAI
 
-from src.core.config import settings
-from src.core.config_manager import app_config, config_manager
+from src.core.config_manager import config_manager
 from src.core.state import EngineeringState
 from src.schemas import ApprovalStatus, TechnicalPlan
 from src.tools import read_file
@@ -27,8 +25,10 @@ def planning_node(state: EngineeringState) -> Dict[str, Any]:
     persona = load_agent_persona("planning")
     system_prompt = build_system_prompt(persona)
     if state.is_lightweight:
-        system_prompt = "THIS IS A LIGHTWEIGHT task. Follow the Lightweight Task Protocol.\n\n" + system_prompt
-
+        system_prompt = (
+            "THIS IS A LIGHTWEIGHT task. Follow the Lightweight Task Protocol.\n\n"
+            + system_prompt
+        )
 
     # 2. Setup LLM and tools
     llm = config_manager.get_agent_llm("planner")
@@ -45,7 +45,9 @@ def planning_node(state: EngineeringState) -> Dict[str, Any]:
 
     if state.follow_up_context:
         task_description = state.follow_up_context
-        logger.info("📈 Using follow-up context from Growth recommendations as task description.")
+        logger.info(
+            "📈 Using follow-up context from Growth recommendations as task description."
+        )
     elif user_messages:
         task_description = user_messages[
             0

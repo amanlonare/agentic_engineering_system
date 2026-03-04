@@ -88,4 +88,3 @@ class EngineeringState(BaseModel):
         default=False,
         description="If True, the task is simple and agents should use simplified prompts (e.g., no mocking).",
     )
-

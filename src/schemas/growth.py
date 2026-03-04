@@ -19,5 +19,6 @@ class GrowthRecommendation(BaseModel):
     false_positive_rate: float | None = None
     affected_segments: list[str] = []
     suggested_action: str | None = Field(
-        default=None, description="Suggested corrective action based on the analysis, if any"
+        default=None,
+        description="Suggested corrective action based on the analysis, if any",
     )

@@ -10,12 +10,11 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
 )
 
-from src.core.state import EngineeringState
 from src.core.config_manager import app_config, config_manager
+from src.core.state import EngineeringState
 from src.prompts.supervisor import SUPERVISOR_SYSTEM_PROMPT
 from src.schemas import GrowthRecommendationType, NodeName, RouteDecision, StepStatus
 from src.utils.logger import configure_logging
-
 
 logger = configure_logging("supervisor")
 
@@ -39,7 +38,9 @@ def _build_follow_up_prompt(recommendations, depth: int = 1) -> str:
         if r.suggested_repo:
             lines.append(f"   Target Repo: {r.suggested_repo}")
         if r.drift_detected:
-            lines.append(f"   ⚠️ Model drift detected (false positive rate: {r.false_positive_rate})")
+            lines.append(
+                f"   ⚠️ Model drift detected (false positive rate: {r.false_positive_rate})"
+            )
     return "\n".join(lines)
 
 
@@ -47,7 +48,8 @@ def _check_growth_follow_up(state: EngineeringState, logger):
     """Check if accumulated growth recommendations warrant a follow-up plan.
     Returns a state update dict if follow-up is needed, None otherwise."""
     actionable = [
-        r for r in (state.growth_recommendations or [])
+        r
+        for r in (state.growth_recommendations or [])
         if r.recommendation_type != GrowthRecommendationType.NO_ACTION
     ]
     if actionable and state.follow_up_depth < app_config.workflow.max_follow_up_depth:
@@ -56,7 +58,9 @@ def _check_growth_follow_up(state: EngineeringState, logger):
             len(actionable),
             state.follow_up_depth + 1,
         )
-        follow_up_prompt = _build_follow_up_prompt(actionable, state.follow_up_depth + 1)
+        follow_up_prompt = _build_follow_up_prompt(
+            actionable, state.follow_up_depth + 1
+        )
         return {
             "next_action": NodeName.PLANNING,
             "task_plan": None,
@@ -86,10 +90,17 @@ def supervisor_node(state: EngineeringState) -> dict:
         query = last_msg.lower() if isinstance(last_msg, str) else ""
         # Heuristic: No repo identifier AND (short query OR simple keywords)
 
-        simple_keywords = ["print", "even numbers", "odd numbers", "hello world", "algorithm", "simple"]
+        simple_keywords = [
+            "print",
+            "even numbers",
+            "odd numbers",
+            "hello world",
+            "algorithm",
+            "simple",
+        ]
         has_simple_kw = any(kw in query for kw in simple_keywords)
         no_repo = state.trigger.repo_name == "General" if state.trigger else True
-        
+
         if no_repo or has_simple_kw:
             logger.info("⚡ Lightweight task detected. Setting is_lightweight=True.")
             return {"is_lightweight": True, "next_action": NodeName.PLANNING}
@@ -103,7 +114,6 @@ def supervisor_node(state: EngineeringState) -> dict:
         return {"next_action": NodeName.FINISH}
 
     llm = config_manager.get_agent_llm("supervisor")
-
 
     if not llm:
         # Mock logic to test routing: If no messages from agents yet, go to planning. Otherwise FINISH.
@@ -207,7 +217,7 @@ def supervisor_node(state: EngineeringState) -> dict:
                         next_node = agent_map.get(
                             step.assigned_to.lower(), NodeName.CODER
                         )
-                    
+
                     logger.info(
                         "🔄 Rework detected! Verification for %s failed. Routing back to %s.",
                         step.id,
