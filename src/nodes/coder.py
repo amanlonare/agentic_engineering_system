@@ -313,15 +313,13 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
             r"\[VERIFICATION_SCRIPT:\s*([a-zA-Z0-9_\-\./]+)\]", final_content
         )
 
-        # Fallback: Scan ToolMessages for any 'write_file' to a path containing 'verify' or 'test'
+        # Fallback: Scan ToolMessages for any 'write_file' to tests/ directory
         for msg in messages:
             if isinstance(msg, AIMessage) and msg.tool_calls:
                 for tc in msg.tool_calls:
                     if tc["name"] == "write_file":
                         path = tc["args"].get("path", "")
-                        if (
-                            "verify" in path.lower() or "test" in path.lower()
-                        ) and path.endswith(".py"):
+                        if "/tests/" in path and path.endswith(".py"):
                             # Clean the path to be relative to .context/{repo}/ for Ops
                             clean_path = path.replace(f".context/{repo}/", "")
                             if clean_path not in script_matches:
