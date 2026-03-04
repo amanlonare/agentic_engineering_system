@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026-03-04]
+
+### Summary of Configuration System & Lightweight Task Mode Rollout
+Successfully migrated the entire project away from hardcoded settings to a flexible, environment-aware YAML configuration system. Additionally, implemented a "Lightweight Task Mode" to streamline execution for simpler tasks, avoiding unnecessary scaffolding and rigorous structural validation protocols. 
+
+### Added
+- **Dynamic Configuration Management**: Introduced `ConfigManager` to aggregate settings automatically across `default.yaml` and environment-specific overrides (`dev.yaml`, `staging.yaml`, `prod.yaml`).
+- **Unified Environment Settings**: Merged secrets control via `.env` with explicit values specified in YAML configuration files, improving transparency over system variables.
+- **Ops Agent Configuration**: Officially mapped the Ops Agent parameters (e.g. `verification_timeout`, `max_rework`, LLM configs) into the fully centralized YAML configurations.
+- **Lightweight Task Tracking**: Injected an `is_lightweight` heuristic into the Supervisor, detecting low-complexity prompts automatically based on keywords and missing repositories.
+- **Protocol Bypasses**: The Planning and Coder personas now explicitly skip demanding mocking routines (e.g. boto3/requests verification templates) when operating under the "Lightweight Task Protocol".
+
+### Fixed
+- **Pytest Instabilities**: Re-linked legacy test frameworks (`test_ops_deterministic.py`, `test_webhook.py`) to the new unified `ConfigManager`, resolving outdated mock `AttributeError` tracebacks.
+- **Orchestration Boilerplate Issues**: Lightweight Mode prevents infinite scaling or looping issues on simple commands (like basic bash outputs) by using direct execution scripts instead of deep verification templates.
+- **Extraneous Module Loading**: Systematically eliminated the obsolete `src/providers` directory and references, saving computational overhead during LLM initialization across agents.
+
 ## [2026-03-03]
 
 ### Summary of GitHub Webhook Integration & Routing Optimizations

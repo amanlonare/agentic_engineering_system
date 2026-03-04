@@ -8,9 +8,8 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
-from langchain_openai import ChatOpenAI
 
-from src.core.config import settings
+from src.core.config_manager import app_config, config_manager
 from src.core.state import EngineeringState
 from src.schemas import StepExecutionRecord, StepStatus
 from src.tools.codebase_tools import get_restricted_tools
@@ -57,9 +56,6 @@ def _walk_tree(path: str, prefix: str, lines: list, current_depth: int, max_dept
                 lines.append(f"{prefix}{connector}{entry}")
     except OSError:
         pass
-
-
-MAX_TOOL_CALLS = 20
 
 
 def coder_node(state: EngineeringState) -> Dict[str, Any]:
@@ -194,9 +190,14 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
     # 2. Setup Persona and Tools
     persona = load_agent_persona("coder")
     system_prompt = build_system_prompt(persona).replace("{repo_name}", repo)
+    if state.is_lightweight:
+        system_prompt = (
+            "THIS IS A LIGHTWEIGHT task. Follow the Lightweight Task Protocol.\n\n"
+            + system_prompt
+        )
 
     tools = get_restricted_tools(repo)
-    llm = ChatOpenAI(model=settings.OPENAI_MODEL_NAME, temperature=0.0, max_retries=5)
+    llm = config_manager.get_agent_llm("coder")
     llm_with_tools = llm.bind_tools(tools)
 
     # 3. Build Messages
@@ -213,7 +214,10 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
             str, str
         ] = {}  # Track ALL calls: "tool(args)" -> result
         consecutive_dup_rounds = 0  # Force-break after N all-duplicate rounds
-        MAX_DUP_ROUNDS = 3
+        # Configurable limits
+        agent_cfg = app_config.agents.get("coder")
+        MAX_TOOL_CALLS = agent_cfg.max_tool_calls if agent_cfg else 20
+        MAX_DUP_ROUNDS = agent_cfg.max_duplicate_rounds if agent_cfg else 3
 
         while tool_call_count < MAX_TOOL_CALLS:
             response = llm_with_tools.invoke(messages)
@@ -241,8 +245,8 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
                         ToolMessage(
                             tool_call_id=tool_call["id"] or "",
                             content=(
-                                f"⚠️ DUPLICATE: You already called this. Result was: {prev_result[:200]}\n"
-                                f"Do NOT repeat. Use write_file to implement your code NOW."
+                                f"⚠️ SUCCESS: You already called this and it succeeded (Result: {prev_result[:100]}...).\n"
+                                f"Do NOT repeat the same write_file. If you're done, summarize and finish."
                             ),
                         )
                     )
@@ -275,7 +279,10 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
             # FORCE-BREAK: If all calls in this round were duplicates, count it
             if all_duplicates_this_round:
                 consecutive_dup_rounds += 1
-                if consecutive_dup_rounds >= MAX_DUP_ROUNDS:
+                if (
+                    MAX_DUP_ROUNDS is not None
+                    and consecutive_dup_rounds >= MAX_DUP_ROUNDS
+                ):
                     logger.warning(
                         "🛑 Force-breaking loop: %d consecutive all-duplicate rounds.",
                         MAX_DUP_ROUNDS,
@@ -298,11 +305,34 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
             # NOTE: We still return history so the Supervisor can see the Coder "attempted" rework.
             # This prevents the supervisor from re-routing here infinitely.
 
+        # 5. Extract Verification Scripts from final message (Manual tags + Automatic detection)
+        import re
+
+        final_content = str(messages[-1].content)
+        script_matches = re.findall(
+            r"\[VERIFICATION_SCRIPT:\s*([a-zA-Z0-9_\-\./]+)\]", final_content
+        )
+
+        # Fallback: Scan ToolMessages for any 'write_file' to a path containing 'verify' or 'test'
+        for msg in messages:
+            if isinstance(msg, AIMessage) and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    if tc["name"] == "write_file":
+                        path = tc["args"].get("path", "")
+                        if (
+                            "verify" in path.lower() or "test" in path.lower()
+                        ) and path.endswith(".py"):
+                            # Clean the path to be relative to .context/{repo}/ for Ops
+                            clean_path = path.replace(f".context/{repo}/", "")
+                            if clean_path not in script_matches:
+                                script_matches.append(clean_path)
+
         return {
             # Only return the FINAL summary message to shared state, not all internal tool calls.
             "messages": [messages[-1]],
             "completed_step_ids": completed_ids,
             "execution_history": history,  # Always return history, even if truncated by tool cap
+            "verification_scripts": script_matches,
         }
 
     except Exception:

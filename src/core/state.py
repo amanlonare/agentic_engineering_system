@@ -46,8 +46,21 @@ class EngineeringState(BaseModel):
     execution_history: Annotated[List["StepExecutionRecord"], operator.add] = Field(
         default_factory=list, description="Structured log of each agent's actions"
     )
-    growth_recommendation: Optional[GrowthRecommendation] = Field(
-        default=None, description="Structured analysis and signal from Growth node"
+    growth_recommendations: List[GrowthRecommendation] = Field(
+        default_factory=list,
+        description="Recommendations from Growth agent (cleared after follow-up)",
+    )
+    follow_up_depth: int = Field(
+        default=0,
+        description="Number of follow-up plans created from growth recommendations (max 2)",
+    )
+    follow_up_context: Optional[str] = Field(
+        default=None,
+        description="When set, Planning Agent uses this as task description instead of the original user message",
+    )
+    verification_scripts: Annotated[List[str], operator.add] = Field(
+        default_factory=list,
+        description="Accumulated verification script paths (Coder -> Ops handoff)",
     )
 
     # Execution outcomes
@@ -69,4 +82,9 @@ class EngineeringState(BaseModel):
     error_message: Optional[str] = Field(
         default=None,
         description="If set, an agent has failed. Supervisor should FINISH.",
+    )
+
+    is_lightweight: bool = Field(
+        default=False,
+        description="If True, the task is simple and agents should use simplified prompts (e.g., no mocking).",
     )

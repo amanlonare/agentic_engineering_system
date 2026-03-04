@@ -173,6 +173,22 @@ async def github_webhook(
                 else:
                     body_content += "\n**Verification:** Failed ❌\n"
 
+            # Check for injected branch name
+            if "messages" in final_state_data and final_state_data["messages"]:
+                last_msg = final_state_data["messages"][-1]
+                content = getattr(last_msg, "content", "")
+                if "[STATE_INJECT:BRANCH:" in content:
+                    import re
+
+                    match = re.search(r"\[STATE_INJECT:BRANCH:(.*?)\]", content)
+                    if match:
+                        branch_name = match.group(1)
+                        body_content += (
+                            f"\n**Branch:** `{branch_name}` — ready for PR 🚀\n"
+                        )
+                        # Clean up the message content
+                        last_msg.content = content.replace(match.group(0), "").strip()
+
             body_content += f"\nProcessed by internal system. Target scope was identified as `{target_repo}`."
 
         comment_body = f"### {status_emoji} {status_title}\n\n{body_content}\n\n*Thread ID: `{thread_id}`*"

@@ -7,9 +7,8 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
-from langchain_openai import ChatOpenAI
 
-from src.core.config import settings
+from src.core.config_manager import app_config, config_manager
 from src.core.state import EngineeringState
 from src.schemas import StepExecutionRecord, StepStatus, TestReport
 from src.tools.codebase_tools import get_ops_tools
@@ -17,8 +16,6 @@ from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.utils.logger import configure_logging
 
 logger = configure_logging("ops")
-
-MAX_TOOL_CALLS = 10
 
 
 def ops_node(state: EngineeringState) -> Dict[str, Any]:
@@ -77,6 +74,9 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
         instructions = (
             f"Current Plan Step [{current_step.id}]: {current_step.description}"
         )
+        if state.verification_scripts:
+            instructions += f"\nVerification Scripts to run: {', '.join(state.verification_scripts)}"
+
         if current_step.verification_criteria:
             instructions += (
                 f"\nVerification Criteria: {current_step.verification_criteria}"
@@ -89,7 +89,7 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
     system_prompt = build_system_prompt(persona)
     tools = get_ops_tools(repo)
 
-    llm = ChatOpenAI(model=settings.OPENAI_MODEL_NAME, temperature=0.0, max_retries=5)
+    llm = config_manager.get_agent_llm("ops")
     llm_with_tools = llm.bind_tools(tools)
 
     messages: List[BaseMessage] = [SystemMessage(content=system_prompt)]
@@ -102,6 +102,10 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
         # 3. Tool-Calling Loop
         tool_call_count = 0
         turn_tool_history: Dict[str, str] = {}  # Track ALL calls in this turn
+
+        # Configurable limits
+        agent_cfg = app_config.agents.get("ops")
+        MAX_TOOL_CALLS = agent_cfg.max_tool_calls if agent_cfg else 10
 
         while tool_call_count < MAX_TOOL_CALLS:
             response = llm_with_tools.invoke(messages)
@@ -153,9 +157,9 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
 
         # 4. Generate Structured TestReport (Phase 2)
         logger.info("📋 Finalizing structured TestReport...")
-        structured_llm = ChatOpenAI(
-            model=settings.OPENAI_MODEL_NAME, temperature=0.0, max_retries=5
-        ).with_structured_output(TestReport)
+        structured_llm = config_manager.get_agent_llm("ops").with_structured_output(
+            TestReport
+        )
 
         # Invoke returns TestReport as requested by with_structured_output
         report = cast(
@@ -170,15 +174,26 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
             ),
         )
 
-        # CRITICAL FIX: Override LLM "hallucination" of success if we saw a non-zero exit code in messages
+        # CRITICAL FIX: Override LLM "hallucination" of success if we saw a non-fatal command failure
         actual_command_failure = False
         failure_details = ""
         for msg in messages:
             if isinstance(msg, ToolMessage) and "Exit Code:" in msg.content:
+                content = str(msg.content)
+                # Ignore Exit Code 128 (branch already exists)
+                if "Exit Code: 128" in content and "fatal: a branch named" in content:
+                    continue
+                # Ignore Exit Code 1 (nothing to commit)
+                if (
+                    "Exit Code: 1" in content
+                    and "nothing to commit, working tree clean" in content
+                ):
+                    continue
+
                 # Basic check for non-zero exit code
-                if "Exit Code: 0" not in msg.content:
+                if "Exit Code: 0" not in content:
                     actual_command_failure = True
-                    failure_details = msg.content  # Capture the full STDERR + exit code
+                    failure_details = content  # Capture the full STDERR + exit code
                     logger.warning(
                         "🚨 Detected actual command failure in tool outputs. Overriding report.success to False."
                     )
@@ -187,7 +202,22 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
         if actual_command_failure:
             report.success = False
 
-        # 5. Populate Execution History
+        # 5. Extract Branch Name (if a git push occurred)
+        branch_name = None
+        for msg in messages:
+            if isinstance(msg, ToolMessage) and "git push" in str(msg.content):
+                pass
+
+        # Look for the final git branch name in the LLM's final response
+        last_content = str(getattr(messages[-1], "content", ""))
+        if report.success and "feature/issue-" in last_content:
+            import re
+
+            match = re.search(r"feature/issue-[\w\-]+", last_content)
+            if match:
+                branch_name = match.group(0)
+
+        # 6. Populate Execution History
         if completed_ids and current_step:
             status = StepStatus.COMPLETED if report.success else StepStatus.FAILED
             # Include the full command failure output so the Supervisor can relay it to the Coder
@@ -204,7 +234,7 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
                 )
             ]
 
-        return {
+        response_payload: Dict[str, Any] = {
             # Only return the FINAL summary message to shared state, not all internal tool calls.
             # This prevents state.messages from growing unboundedly with every tool call made.
             "messages": [messages[-1]],
@@ -212,6 +242,18 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
             "completed_step_ids": completed_ids if report.success else [],
             "execution_history": history,
         }
+
+        if branch_name:
+            # We use a state update for branch_name if the global state schema supports it,
+            # or append it to the outcome history. Since EngineeringState currently has no
+            # explicit `branch_name` field, we will inject it into the final message instead.
+            last_msg_content = str(getattr(messages[-1], "content", ""))
+            if isinstance(last_msg_content, str):
+                messages[-1].content = (
+                    last_msg_content + f"\n\n[STATE_INJECT:BRANCH:{branch_name}]"
+                )
+
+        return response_payload
     except Exception:
         logger.exception("Ops Agent failed unexpectedly")
         return {

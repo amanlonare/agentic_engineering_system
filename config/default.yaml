@@ -1,0 +1,40 @@
+# 🌍 Dynamic Agentic Engineering System Configuration
+
+# LLM Defaults (OpenAI only)
+llm:
+  provider: "openai"
+  default_model: "gpt-4o-mini"
+  default_temperature: 0.0
+  max_retries: 5
+  # Agent-specific overrides
+  agents:
+    planner:
+      model: "gpt-4o-mini"
+      temperature: 0.0
+    coder:
+      model: "gpt-4o-mini"
+      temperature: 0.0
+    ops:
+      model: "gpt-4o-mini"
+      temperature: 0.0
+    growth:
+      model: "gpt-4o-mini"
+      temperature: 0.0
+    supervisor:
+      model: "gpt-4o-mini"
+      temperature: 0.0
+
+# Agent Operational Limits
+agents:
+  coder:
+    max_tool_calls: 20
+    max_duplicate_rounds: 3
+  ops:
+    max_tool_calls: 10
+  growth:
+    max_tool_calls: 10
+
+# Workflow Orchestration
+workflow:
+  max_rework_attempts: 3
+  max_follow_up_depth: 2

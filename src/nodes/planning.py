@@ -1,9 +1,8 @@
 from typing import Any, Dict
 
 from langchain_core.messages import AIMessage
-from langchain_openai import ChatOpenAI
 
-from src.core.config import settings
+from src.core.config_manager import config_manager
 from src.core.state import EngineeringState
 from src.schemas import ApprovalStatus, TechnicalPlan
 from src.tools import read_file
@@ -25,9 +24,14 @@ def planning_node(state: EngineeringState) -> Dict[str, Any]:
     # 1. Load Persona
     persona = load_agent_persona("planning")
     system_prompt = build_system_prompt(persona)
+    if state.is_lightweight:
+        system_prompt = (
+            "THIS IS A LIGHTWEIGHT task. Follow the Lightweight Task Protocol.\n\n"
+            + system_prompt
+        )
 
     # 2. Setup LLM and tools
-    llm = ChatOpenAI(model=settings.OPENAI_MODEL_NAME, temperature=0, max_retries=5)
+    llm = config_manager.get_agent_llm("planner")
     llm_with_tools = llm.bind_tools([read_file])
     structured_llm = llm.with_structured_output(TechnicalPlan)
 
@@ -39,7 +43,12 @@ def planning_node(state: EngineeringState) -> Dict[str, Any]:
         m.content for m in state.messages if isinstance(m, HumanMessage) and m.content
     ]
 
-    if user_messages:
+    if state.follow_up_context:
+        task_description = state.follow_up_context
+        logger.info(
+            "📈 Using follow-up context from Growth recommendations as task description."
+        )
+    elif user_messages:
         task_description = user_messages[
             0
         ]  # Use the FIRST human message (original request)

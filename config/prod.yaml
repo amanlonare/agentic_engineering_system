@@ -1,0 +1,37 @@
+# 🚀 Production Configuration
+# Optimized for stability and high accuracy
+
+llm:
+  provider: "openai"
+  default_model: "gpt-4o"
+  default_temperature: 0.0
+  max_retries: 10          # High retry limit for reliability
+  agents:
+    planner:
+      model: "gpt-4o"
+      temperature: 0.0
+    coder:
+      model: "gpt-4o"       # Highest power model for coding
+      temperature: 0.0
+    ops:
+      model: "gpt-4o"
+      temperature: 0.0
+    growth:
+      model: "gpt-4o"
+      temperature: 0.0
+    supervisor:
+      model: "gpt-4o"
+      temperature: 0.0
+
+agents:
+  coder:
+    max_tool_calls: 30       # More room for complex production fixes
+    max_duplicate_rounds: 5
+  ops:
+    max_tool_calls: 15
+  growth:
+    max_tool_calls: 15
+
+workflow:
+  max_rework_attempts: 5
+  max_follow_up_depth: 3

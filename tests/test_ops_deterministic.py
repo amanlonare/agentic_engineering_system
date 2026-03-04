@@ -33,13 +33,14 @@ class TestOpsDeterministic(unittest.TestCase):
             type="manual", repo_name="mobile-app", payload={"description": "Test Auth"}
         )
 
-    @patch("src.nodes.ops.ChatOpenAI")
+    @patch("src.nodes.ops.config_manager.get_agent_llm")
     @patch("src.nodes.ops.get_ops_tools")
     @patch("src.nodes.ops.load_agent_persona")
     @patch("src.nodes.ops.build_system_prompt")
     def test_ops_successful_verification(
-        self, mock_build_prompt, mock_load_persona, mock_get_tools, mock_llm_class
+        self, mock_build_prompt, mock_load_persona, mock_get_tools, mock_get_agent_llm
     ):
+
         # 1. Setup Mocks
         mock_load_persona.return_value = {"name": "ops", "system_prompt": "You are ops"}
         mock_build_prompt.return_value = "System prompt"
@@ -79,9 +80,9 @@ class TestOpsDeterministic(unittest.TestCase):
         )
         mock_structured_llm.invoke.return_value = mock_report
 
-        # Configure mock_llm_class to return our instances
+        # Configure mock_get_agent_llm to return our instances
         mock_llm_instance.with_structured_output.return_value = mock_structured_llm
-        mock_llm_class.return_value = mock_llm_instance
+        mock_get_agent_llm.return_value = mock_llm_instance
 
         # 2. Execute Node
         state = EngineeringState(
@@ -105,10 +106,11 @@ class TestOpsDeterministic(unittest.TestCase):
         # Verify tool was called
         mock_tool.invoke.assert_called_once_with({"command": "pytest"})
 
-    @patch("src.nodes.ops.ChatOpenAI")
+    @patch("src.nodes.ops.config_manager.get_agent_llm")
     @patch("src.nodes.ops.get_ops_tools")
-    def test_ops_failure_verification(self, mock_get_tools, mock_llm_class):
+    def test_ops_failure_verification(self, mock_get_tools, mock_get_agent_llm):
         # Mock failure scenario
+
         mock_llm_instance = MagicMock()
         mock_llm_instance.invoke.return_value = MagicMock(
             tool_calls=[], content="Logic error found."
@@ -130,7 +132,7 @@ class TestOpsDeterministic(unittest.TestCase):
         )
         mock_structured_llm.invoke.return_value = mock_report
         mock_llm_instance.with_structured_output.return_value = mock_structured_llm
-        mock_llm_class.return_value = mock_llm_instance
+        mock_get_agent_llm.return_value = mock_llm_instance
 
         state = EngineeringState(
             messages=[HumanMessage(content="Current Plan Step [STEP-1]")],

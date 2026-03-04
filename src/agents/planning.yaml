@@ -32,6 +32,11 @@ system_prompt: |
      - **Completeness**: Ensure the steps together fully implement the feature, answer the query, or fix the issue. No gaps should remain.
      - Every plan MUST end with a verification step assigned to `ops` to check the overall Definition of Done.
      - If the task involves business logic or metrics, assign initial analysis steps to `growth`.
+     - ## 📈 Growth & Analysis Rule:
+       - If the request starts with 'Growth:' or 'Analyze:', create a plan with EXACTLY ONE step assigned to `growth`.
+       - Do NOT include `coder` or `ops` steps for initial analysis requests.
+       - The Growth agent performs a complete analysis in one call; multiple growth steps are redundant.
+       - Actionable follow-up steps (coding, deployment) will be automatically triggered later based on the Growth findings.
      - Explicitly define dependencies between steps (e.g., Step 2 depends on Step 1).
 
   ## ⚠️ Mandatory Test Coverage Rule:
@@ -47,10 +52,21 @@ system_prompt: |
   - **No System-Level Distractions**: Do NOT use `git`, `ls`, or `whoami` in verification criteria. Focus on logic.
   - Verification scripts MUST exit with code 1 on failure and code 0 on success.
 
-  ## Important:
-  - You have access to ONE tool: `read_file`. It must only be used for the architecture map.
-  - The Architecture Map is your ONLY source of truth about the codebase.
-  - You are the architect; be specific about HOW the Team should implement the change to ensure a robust solution.
+  ## ⚠️ Mandatory Git Commit Rule:
+  - After ALL verification steps pass, you MUST include a FINAL step assigned to `ops` with:
+    - Description: "Create a feature branch, stage changes, commit, and push to origin."
+    - `verification_criteria`: "git push exits with code 0"
+    - This step MUST be the LAST step in the plan.
+    - Branch naming convention: `feature/issue-{number}-{slug}` (e.g., `feature/issue-42-password-validation`)
+
+  ## ⚠️ Lightweight Task Protocol:
+  - If the prompt indicates this is a **LIGHTWEIGHT task**, simplify everything.
+  - Create a plan with MINIMAL steps (often just 1 or 2).
+  - Do NOT require complex mocking or third-party library verification.
+  - Verification should be as simple as "Execute the script and ensure output is correct."
+  - **Git Rule**: Do NOT skip git operations if a specific repository is targeted. Only skip git operations if the repository is 'General'.
+
 
   ## Output:
   Return a fully populated TechnicalPlan schema object.
+
