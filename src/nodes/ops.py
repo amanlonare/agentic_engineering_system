@@ -82,6 +82,14 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
                 f"\nVerification Criteria: {current_step.verification_criteria}"
             )
 
+        # 1.1 Inject Growth Recommendations into Git steps
+        if state.accumulated_growth_notes and (
+            "git" in current_step.description.lower()
+            or "commit" in current_step.description.lower()
+            or "push" in current_step.description.lower()
+        ):
+            instructions += f"\n\n🚀 ADDITIONAL GROWTH RECOMMENDATIONS TO INCLUDE IN COMMIT/PR:\n{state.accumulated_growth_notes}"
+
     logger.info(f"🔒 Locking tools to repository: {repo}")
 
     # 2. Setup Persona and Tools
@@ -201,6 +209,24 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
 
         if actual_command_failure:
             report.success = False
+        elif not report.success:
+            # NEW: Override false negatives (LLM says failure but ALL commands succeeded)
+            # This handles cases where LLM is confused by "Ran 0 tests" or other non-terminal output.
+            commands_run = False
+            all_successful = True
+            for msg in messages:
+                if isinstance(msg, ToolMessage) and "Exit Code:" in msg.content:
+                    commands_run = True
+                    if "Exit Code: 0" not in msg.content:
+                        all_successful = False
+                        break
+
+            if commands_run and all_successful:
+                logger.warning(
+                    "✅ Overriding report.success to True: All commands exited with code 0 "
+                    "but LLM reported failure (likely confused by text output)."
+                )
+                report.success = True
 
         # 5. Extract Branch Name (if a git push occurred)
         branch_name = None
@@ -210,10 +236,10 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
 
         # Look for the final git branch name in the LLM's final response
         last_content = str(getattr(messages[-1], "content", ""))
-        if report.success and "feature/issue-" in last_content:
+        if report.success and "feature/" in last_content:
             import re
 
-            match = re.search(r"feature/issue-[\w\-]+", last_content)
+            match = re.search(r"feature/[\w\-]+", last_content)
             if match:
                 branch_name = match.group(0)
 

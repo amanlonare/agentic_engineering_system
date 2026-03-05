@@ -302,14 +302,17 @@ def get_ops_tools(restriction_scope: str) -> list:
             return f"Error: The repository directory '{restriction_scope}' does not exist directly. Cannot run commands."
 
         try:
-            # We use shell=True here to allow generic commands like `pytest tests/`
-            # Note: in a true production system accepting arbitrary LLM input, shell=True is dangerous
-            # However, since this is a prototype limited to the .context/, we will allow it for flexibility
-            # with a strict timeout.
+            # Run from repo root (.context/{repo}/). PYTHONPATH ensures absolute imports work.
+            env = os.environ.copy()
+            env["PYTHONPATH"] = base_dir + (
+                os.pathsep + env.get("PYTHONPATH", "") if env.get("PYTHONPATH") else ""
+            )
+
             result = subprocess.run(
                 command,
                 shell=True,
-                cwd=base_dir,
+                cwd=base_dir,  # Run inside the repository root
+                env=env,
                 capture_output=True,
                 text=True,
                 timeout=20,  # Hard timeout to prevent infinite hanging
