@@ -1,5 +1,19 @@
 # Changelog
 
+## [2026-03-05]
+
+### Summary of Prompt Enhancements & Growth Capabilities
+Successfully refined the strictness of the Planning and Coder agents via prompt optimizations, drastically improving reliability across the architecture. Hardened testing pathways to ensure robust cross-agent cooperation, integrated persistent Growth Agent recommendations, and validated the system end-to-end on diverse architectural tasks.
+
+### Added
+- **Strict Anti-Guessing Rule**: Enforced a "Never Guess Imports" rule in `coder.yaml`, requiring the Coder to natively scrape implementation files before attempting to write verification scripts.
+- **Persistent Growth Integration**: Established long-term state persistence for business and analytics insights (`accumulated_growth_notes`), which seamlessly inject into Git Ops commits despite intermediate memory resets.
+- **Universal Test Path Standardization**: Pinned all Verification scripts across Planning, Coder, and Ops agents to the root `tests/` directory to permanently eradicate path mismatch errors.
+
+### Fixed
+- **Testing Import Errors**: Eliminated hallucinatory `ImportErrors` during Ops verification by forcing the Coder to definitively verify exported function/class names before testing.
+- **Ops Infinite Loop Prevention**: Deployed a "Success Override" fallback in `ops.py` to intercept code 0 test scripts misinterpreted as LLM failures.
+
 ## [2026-03-04]
 
 ### Summary of Configuration System & Lightweight Task Mode Rollout

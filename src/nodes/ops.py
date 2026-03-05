@@ -88,9 +88,7 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
             or "commit" in current_step.description.lower()
             or "push" in current_step.description.lower()
         ):
-            instructions += (
-                f"\n\n🚀 ADDITIONAL GROWTH RECOMMENDATIONS TO INCLUDE IN COMMIT/PR:\n{state.accumulated_growth_notes}"
-            )
+            instructions += f"\n\n🚀 ADDITIONAL GROWTH RECOMMENDATIONS TO INCLUDE IN COMMIT/PR:\n{state.accumulated_growth_notes}"
 
     logger.info(f"🔒 Locking tools to repository: {repo}")
 
@@ -222,7 +220,7 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
                     if "Exit Code: 0" not in msg.content:
                         all_successful = False
                         break
-            
+
             if commands_run and all_successful:
                 logger.warning(
                     "✅ Overriding report.success to True: All commands exited with code 0 "

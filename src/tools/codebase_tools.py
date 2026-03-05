@@ -304,8 +304,10 @@ def get_ops_tools(restriction_scope: str) -> list:
         try:
             # Run from repo root (.context/{repo}/). PYTHONPATH ensures absolute imports work.
             env = os.environ.copy()
-            env["PYTHONPATH"] = base_dir + (os.pathsep + env.get("PYTHONPATH", "") if env.get("PYTHONPATH") else "")
-            
+            env["PYTHONPATH"] = base_dir + (
+                os.pathsep + env.get("PYTHONPATH", "") if env.get("PYTHONPATH") else ""
+            )
+
             result = subprocess.run(
                 command,
                 shell=True,

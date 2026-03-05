@@ -61,13 +61,15 @@ def _check_growth_follow_up(state: EngineeringState, logger):
         follow_up_prompt = _build_follow_up_prompt(
             actionable, state.follow_up_depth + 1
         )
-        
+
         # Accumulate recommendations before clearing them so Ops can use them later
         new_notes = "\n".join(
             [
-                f"- {r.analysis} (Action: {r.suggested_action})"
-                if r.suggested_action
-                else f"- {r.analysis}"
+                (
+                    f"- {r.analysis} (Action: {r.suggested_action})"
+                    if r.suggested_action
+                    else f"- {r.analysis}"
+                )
                 for r in actionable
             ]
         )

@@ -77,25 +77,23 @@ def planning_node(state: EngineeringState) -> Dict[str, Any]:
 
         # 🚨 STRUCTURAL ENFORCEMENT: Force a final Git push step for repo tasks
         repo_name = (
-            state.trigger.repo_name if state.trigger and state.trigger.repo_name else None
+            state.trigger.repo_name
+            if state.trigger and state.trigger.repo_name
+            else None
         )
-        if (
-            plan
-            and repo_name
-            and repo_name != "General"
-            and len(plan.steps) > 0
-        ):
+        if plan and repo_name and repo_name != "General" and len(plan.steps) > 0:
             last_step = plan.steps[-1]
-            has_git_step = (
-                last_step.assigned_to == "ops"
-                and any(kw in last_step.description.lower() for kw in ["git", "push", "commit", "branch"])
+            has_git_step = last_step.assigned_to == "ops" and any(
+                kw in last_step.description.lower()
+                for kw in ["git", "push", "commit", "branch"]
             )
-            
+
             if not has_git_step:
                 import re
                 from datetime import datetime
+
                 # Create a safe branch slug from the title
-                slug = re.sub(r'[^a-z0-9]+', '-', plan.title.lower()).strip('-')[:30]
+                slug = re.sub(r"[^a-z0-9]+", "-", plan.title.lower()).strip("-")[:30]
                 # Fallback if slug is empty
                 if not slug:
                     slug = "task-update"
@@ -114,7 +112,10 @@ def planning_node(state: EngineeringState) -> Dict[str, Any]:
                     ),
                 )
                 plan.steps.append(git_step)
-                logger.info("🚨 Post-processed plan: Added mandatory Git push step for branch: %s", branch_name)
+                logger.info(
+                    "🚨 Post-processed plan: Added mandatory Git push step for branch: %s",
+                    branch_name,
+                )
 
         if plan and repo_name:
             # 🚨 PATH SANITIZER: Strip .context/{repo}/ from ops verification_criteria
@@ -123,8 +124,14 @@ def planning_node(state: EngineeringState) -> Dict[str, Any]:
             for step in plan.steps:
                 if step.assigned_to == "ops" and step.verification_criteria:
                     if prefix in step.verification_criteria:
-                        step.verification_criteria = step.verification_criteria.replace(prefix, "")
-                        logger.info("🧹 Path Sanitizer: Stripped '%s' from %s verification criteria", prefix, step.id)
+                        step.verification_criteria = step.verification_criteria.replace(
+                            prefix, ""
+                        )
+                        logger.info(
+                            "🧹 Path Sanitizer: Stripped '%s' from %s verification criteria",
+                            prefix,
+                            step.id,
+                        )
 
         logger.info("✅ Planning Agent complete")
         if plan:
