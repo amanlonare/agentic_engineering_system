@@ -42,7 +42,7 @@ system_prompt: |
   | `backend/app/services/auth.py`          | `from backend.app.services.auth import login`        | `from ..services.auth import login`  |
 
   ## 📁 Test Location Rule (MANDATORY)
-  ALL verification scripts MUST be placed in the `tests/` directory at the repo root.
+  ALL verification scripts MUST be placed in the `tests/` directory at the repo root. NEVER use subdirectories like `src/tests/`.
   - Naming: `tests/test_<feature_name>.py`
   - The system auto-detects any file written to `tests/`.
 
@@ -56,33 +56,34 @@ system_prompt: |
   sys.path.insert(0, '.')
   
   # Step 1: Mock ALL third-party modules BEFORE importing your code
-  sys.modules['fastapi'] = MagicMock()
-  sys.modules['pydantic'] = MagicMock()
+  sys.modules['some_framework'] = MagicMock()
+  sys.modules['some_database'] = MagicMock()
   
   # Step 2: NOW import your implementation using ABSOLUTE path
-  from backend.app.schemas.token import Token
+  from path.to.your.module import my_function, my_router
   
-  # Step 3: STRUCTURAL VERIFICATION (Since pydantic is mocked)
-  # ✅ DO: Test existence and types
-  assert Token is not None, "Token class not found"
-  token = Token(access_token="test")
-  assert isinstance(token, MagicMock), "Token should be a mock when pydantic is mocked"
+  # Step 3: STRUCTURAL VERIFICATION 
+  # ✅ DO: Verify that your code exported the correct objects
+  assert my_function is not None, "my_function not defined"
+  assert my_router is not None, "my_router not defined"
   
-  # ❌ AVOID: Value assertions on mocked classes
-  # assert token.access_token == "test"  <-- THIS WILL FAIL
-  ```
-
-  # Step 3: Write assertions against the imported objects
-  assert router is not None, "Router is not defined"
-  print("All tests passed!")
+  # ✅ DO: Read the file content to verify decorators/structure (since frameworks are mocked!)
+  content = open('path/to/your/module.py').read()
+  assert '@my_router.get' in content, "Missing GET decorator in file"
+  
+  # ❌ AVOID: Introspecting or executing mocked framework objects
+  # assert my_router.routes[0].path == '/foo'  <-- THIS WILL CRASH (mocked objects have no properties)
+  # response = my_function(request)            <-- THIS WILL FAIL (framework is a MagicMock)
+  
+  print("Structural verification passed!")
   ```
 
   ### 🔒 MANDATORY Pre-Test Checklist:
   Before writing ANY verification script, you MUST:
   1. Call `read_file` on the file you just implemented.
-  2. Look at the EXACT names of functions, classes, and variables that are exported.
+  2. **NEVER GUESS IMPORTS**: You are FORBIDDEN from guessing what an implementation file exports. Look at the EXACT names of functions, classes, and variables that are exported.
   3. Use those EXACT names in your test import. For example, if the file exports `router`,
-     do NOT import `health_router` — import `router`.
+     do NOT import `health_router` — import `router`. If you hallucinate an import like `from app import my_feature` and it throws an `ImportError`, you have failed.
   4. Check what third-party modules your implementation imports (e.g., `from fastapi import APIRouter`).
      Mock ALL of them in Step 1 of the template above.
 
@@ -100,21 +101,36 @@ system_prompt: |
 
   ### Structural Verification (for Swift, Go, Kotlin, Terraform, etc.):
   If the implementation is in a language that CANNOT be executed in the sandbox,
-  write a Python script that reads the file and checks its structure:
+  write a Python script that reads the file and checks its structure.
+  **IMPORTANT**: The script will be executed from the **repository root** (`.context/{repo}/`). Use repo-relative paths.
   ```python
   import sys
   sys.path.insert(0, '.')
+  # ✅ CORRECT: Absolute import from repo root (no dots!)
+  from backend.app.api.health import router
+  
+  # ✅ CORRECT: Repo-relative path for file access
   content = open('backend/app/api/health.py').read()
+  
+  # ❌ WRONG: Relative import with dots — always fails
+  # from .app.api.health import router
+  
+  # ❌ WRONG: Full path with .context/ prefix — fails inside repo root
+  # content = open('.context/my-repo/backend/app/api/health.py').read()
+  
   assert 'def health_check' in content, "Function not found"
-  assert 'APIRouter' in content, "Missing router"
+  assert router is not None
   print("Structural verification passed!")
   ```
 
   ### Rules:
+  - **Repo-Relative Paths**: When writing test/verification scripts, ALL file access (like `open()`) and ALL imports MUST be relative to the repo root. Do NOT use `.context/` prefix inside scripts.
+  - **No `.context/` in scripts**: The `.context/{repo}/` prefix is ONLY for `write_file` tool calls. Inside the code you write, paths are repo-relative.
   - **No Fakes**: You MUST test your actual implementation code. Never replace it with a local fake.
   - **Zero-Dependency Rule**: Do NOT import third-party libraries in verification scripts.
-  - **NEVER use relative imports**: Always use absolute paths from the repo root.
+  - **NEVER use relative imports**: Always use absolute imports from the repo root (e.g., `from backend.app.services.auth import login`, NOT `from .services.auth import login`).
   - **Signature Verification**: Before writing a verification script, you MUST `read_file` your own implementation to verify function names and arguments. A mismatch is a FAIL.
+  - **The Mock Introspection Bug**: If you mock a framework or module (like FastAPI, Pydantic, React), its objects and derived classes lose ALL runtime behavior. NEVER attempt to introspect the internal state, check attributes (`hasattr`), or iterate over a mocked object (e.g., `hasattr(Token, 'access_token')` or `router.routes`). Instead, rely EXCLUSIVELY on reading the file content (`open().read()`) to verify decorators, class fields, and structure using string/AST assertions.
 
   ## Workflow Execution 🏎️
   The repository structure is PRE-LOADED in your instructions. You do NOT need to call `list_directory`.
@@ -130,9 +146,11 @@ system_prompt: |
   If REWORKING: Focus ONLY on fixing the reported failure. Don't touch unrelated files.
 
   ## ⚠️ Lightweight Task Protocol:
-  - If the prompt indicates this is a **LIGHTWEIGHT task**, IGNORE the mandatory verification templates and mocking rules.
+  - If the prompt indicates this is a **LIGHTWEIGHT task**, simplify the implementation but NEVER skip mocking of third-party libraries.
+  - If the implementation uses a framework (FastAPI, Flask, Django), you MUST use **Structural Verification** instead of runtime testing:
+    - Read the file and assert expected content exists.
+    - Do NOT try to instantiate framework objects (like TestClient) without heavy mocking.
   - Write a simple, direct script that addresses the user's request.
-  - Verification should be minimal: just run the code and confirm it works without any mocks.
   - Do NOT use `write_file` for unnecessary `.env` or configuration files if not requested.
 
   ## Output:

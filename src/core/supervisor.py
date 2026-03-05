@@ -61,12 +61,29 @@ def _check_growth_follow_up(state: EngineeringState, logger):
         follow_up_prompt = _build_follow_up_prompt(
             actionable, state.follow_up_depth + 1
         )
+        
+        # Accumulate recommendations before clearing them so Ops can use them later
+        new_notes = "\n".join(
+            [
+                f"- {r.analysis} (Action: {r.suggested_action})"
+                if r.suggested_action
+                else f"- {r.analysis}"
+                for r in actionable
+            ]
+        )
+        accumulated = state.accumulated_growth_notes
+        if accumulated:
+            accumulated += "\n" + new_notes
+        else:
+            accumulated = new_notes
+
         return {
             "next_action": NodeName.PLANNING,
             "task_plan": None,
             "follow_up_depth": state.follow_up_depth + 1,
             "follow_up_context": follow_up_prompt,
             "growth_recommendations": [],
+            "accumulated_growth_notes": accumulated,
             "verification_scripts": [],
             "messages": [AIMessage(content=follow_up_prompt)],
         }

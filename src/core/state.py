@@ -50,6 +50,10 @@ class EngineeringState(BaseModel):
         default_factory=list,
         description="Recommendations from Growth agent (cleared after follow-up)",
     )
+    accumulated_growth_notes: str = Field(
+        default="",
+        description="Persistent text of growth insights to be included in final PR description.",
+    )
     follow_up_depth: int = Field(
         default=0,
         description="Number of follow-up plans created from growth recommendations (max 2)",
