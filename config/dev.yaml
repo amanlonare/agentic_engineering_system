@@ -8,8 +8,10 @@ llm:
   max_retries: 3           # Fewer retries to fail fast in dev
   agents:
     planner:
-      model: "gpt-4o-mini"
-      temperature: 0.0
+      provider: "bedrock"
+      model: "deepseek.v3-v1:0"
+      temperature: 0.1
+      region: "ap-northeast-1"
     coder:
       model: "gpt-4o-mini"
       temperature: 0.0

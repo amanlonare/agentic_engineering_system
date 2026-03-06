@@ -1,5 +1,21 @@
 # Changelog
 
+## [2026-03-06]
+
+### Summary of AWS Bedrock Integration & Multi-Provider Capability
+Successfully integrated AWS Bedrock into the core system architecture, transitioning from an OpenAI-only model to a flexible, multi-provider engine. Implemented a dynamic factory in the `ConfigManager` that allows any agent to be configured with either OpenAI or Bedrock models (Anthropic, Meta, DeepSeek) via simple YAML settings.
+
+### Added
+- **AWS Bedrock Core Integration**: Deployed `ChatBedrockConverse` support across the entire agentic graph.
+- **Multi-Provider LLM Factory**: Upgraded `ConfigManager` to dynamically initialize and route LLM requests based on `provider` tags.
+- **DeepSeek Support**: Verified and integrated `deepseek.v3-v1:0` as a high-performance alternative model on Bedrock.
+- **Tokyo Region Deployment**: Pin-pointed `ap-northeast-1` as the default region for minimal latency and regional compliance.
+- **Structured Debug Logging**: Introduced "Robot" telemetry logs (`🤖 [Agent] -> [Provider] | [Model]`) to provide real-time visibility into LLM routing.
+
+### Fixed
+- **Legacy Model Dead-ends**: Eliminated `ResourceNotFoundException` by migrating to modern Converse-compatible IDs (Claude 3.5 Sonnet, Llama 3).
+- **Retry Validation Errors**: Resolved `max_retries` initialization warnings in Bedrock clients by handling provider-specific parameter schemas.
+
 ## [2026-03-05]
 
 ### Summary of Prompt Enhancements & Growth Capabilities
