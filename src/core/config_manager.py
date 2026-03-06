@@ -3,6 +3,8 @@ from typing import Any, Dict, Optional
 
 import yaml
 from langchain_openai import ChatOpenAI
+from langchain_aws import ChatBedrockConverse
+from langchain_core.language_models.chat_models import BaseChatModel
 from pydantic import BaseModel, SecretStr
 
 from src.utils.logger import configure_logging
@@ -11,8 +13,10 @@ logger = configure_logging()
 
 
 class LLMAgentConfig(BaseModel):
+    provider: Optional[str] = None
     model: Optional[str] = None
     temperature: Optional[float] = None
+    region: Optional[str] = None
 
 
 class LLMConfig(BaseModel):
@@ -20,6 +24,7 @@ class LLMConfig(BaseModel):
     default_model: str = "gpt-4o-mini"
     default_temperature: float = 0.0
     max_retries: int = 5
+    region: str = "us-east-1"
     agents: Dict[str, LLMAgentConfig] = {}
 
 
@@ -85,25 +90,51 @@ class ConfigManager:
 
         self.config = AppConfig(**config_dict)
 
-    def get_agent_llm(self, agent_name: str) -> ChatOpenAI:
-        """Helper to get a configured ChatOpenAI instance for a specific agent."""
+    def get_agent_llm(self, agent_name: str) -> BaseChatModel:
+        """Helper to get a configured LangChain ChatModel instance (OpenAI or Bedrock) for a specific agent."""
         from src.core.config import settings
 
-        # Access through local variables with explicit types to help linters
         app_cfg: AppConfig = self.config
         llm_cfg: LLMConfig = app_cfg.llm
 
         agent_cfg = llm_cfg.agents.get(agent_name)
+
+        # Resolve provider
+        provider = (
+            agent_cfg.provider
+            if agent_cfg and agent_cfg.provider
+            else llm_cfg.provider
+        )
+
+        # Resolve model
         model = (
             agent_cfg.model if agent_cfg and agent_cfg.model else llm_cfg.default_model
         )
+
+        # Resolve temperature
         temp = (
             agent_cfg.temperature
             if agent_cfg and agent_cfg.temperature is not None
             else llm_cfg.default_temperature
         )
 
-        # Ensure api_key is compatible with LangChain's expected SecretStr if provided
+        # Provider-specific initialization
+        if provider == "bedrock":
+            region = (
+                agent_cfg.region
+                if agent_cfg and agent_cfg.region
+                else llm_cfg.region
+            )
+            logger.info(f"🤖 [Agent: {agent_name}] -> [Provider: bedrock] | [Model: {model}] | [Region: {region}]")
+            return ChatBedrockConverse(
+                model=model,
+                temperature=temp,
+                region_name=region,
+                # Bedrock handles retries via botocore, direct parameter not supported in this LangChain class
+            )
+
+        # Default to OpenAI
+        logger.info(f"🤖 [Agent: {agent_name}] -> [Provider: openai] | [Model: {model}]")
         api_key = (
             SecretStr(settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
         )
