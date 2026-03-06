@@ -2,9 +2,9 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
-from langchain_openai import ChatOpenAI
 from langchain_aws import ChatBedrockConverse
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, SecretStr
 
 from src.utils.logger import configure_logging
@@ -101,9 +101,7 @@ class ConfigManager:
 
         # Resolve provider
         provider = (
-            agent_cfg.provider
-            if agent_cfg and agent_cfg.provider
-            else llm_cfg.provider
+            agent_cfg.provider if agent_cfg and agent_cfg.provider else llm_cfg.provider
         )
 
         # Resolve model
@@ -121,11 +119,11 @@ class ConfigManager:
         # Provider-specific initialization
         if provider == "bedrock":
             region = (
-                agent_cfg.region
-                if agent_cfg and agent_cfg.region
-                else llm_cfg.region
+                agent_cfg.region if agent_cfg and agent_cfg.region else llm_cfg.region
             )
-            logger.info(f"🤖 [Agent: {agent_name}] -> [Provider: bedrock] | [Model: {model}] | [Region: {region}]")
+            logger.info(
+                f"🤖 [Agent: {agent_name}] -> [Provider: bedrock] | [Model: {model}] | [Region: {region}]"
+            )
             return ChatBedrockConverse(
                 model=model,
                 temperature=temp,
@@ -134,7 +132,9 @@ class ConfigManager:
             )
 
         # Default to OpenAI
-        logger.info(f"🤖 [Agent: {agent_name}] -> [Provider: openai] | [Model: {model}]")
+        logger.info(
+            f"🤖 [Agent: {agent_name}] -> [Provider: openai] | [Model: {model}]"
+        )
         api_key = (
             SecretStr(settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
         )
