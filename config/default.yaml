@@ -41,3 +41,19 @@ agents:
 workflow:
   max_rework_attempts: 3
   max_follow_up_depth: 2
+
+# Smart Context Manager Ingestion
+ingestion:
+  connectors:
+    github:
+      enabled: true
+      timeout: 30
+    google_drive:
+      enabled: true
+      timeout: 30
+    slack:
+      enabled: true
+      timeout: 30
+    pdf:
+      enabled: true
+      timeout: 30

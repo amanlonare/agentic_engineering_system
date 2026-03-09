@@ -14,7 +14,10 @@ class Settings(BaseSettings):
     # LLM Settings (Secrets only)
     OPENAI_API_KEY: str | None = None
     GITHUB_TOKEN: str | None = None
-    GITHUB_WEBHOOK_SECRET: str | None = None
+    # Ingestion Secrets
+    GOOGLE_SERVICE_ACCOUNT_JSON_PATH: str | None = None
+    SLACK_BOT_TOKEN: str | None = None
+
     APP_ENV: str = "dev"
 
     # Infrastructure (Defaults sourced from YAML config)
