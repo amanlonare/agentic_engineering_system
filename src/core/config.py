@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,11 +13,13 @@ class Settings(BaseSettings):
     )
 
     # LLM Settings (Secrets only)
-    OPENAI_API_KEY: str | None = None
-    GITHUB_TOKEN: str | None = None
+    OPENAI_API_KEY: str | None = Field(default=None, repr=False)
+    GITHUB_TOKEN: str | None = Field(default=None, repr=False)
+    GITHUB_WEBHOOK_SECRET: str | None = Field(default=None, repr=False)
+
     # Ingestion Secrets
-    GOOGLE_SERVICE_ACCOUNT_JSON_PATH: str | None = None
-    SLACK_BOT_TOKEN: str | None = None
+    GOOGLE_SERVICE_ACCOUNT_JSON_PATH: str | None = Field(default=None, repr=False)
+    SLACK_BOT_TOKEN: str | None = Field(default=None, repr=False)
 
     APP_ENV: str = "dev"
 

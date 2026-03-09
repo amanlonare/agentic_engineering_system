@@ -14,11 +14,13 @@ from src.schemas.ingestion import IdentifiedSource, SourceType
 
 
 class SourceIdentifier:
-    """ Identifies and verifies data sources for ingestion."""
+    """Identifies and verifies data sources for ingestion."""
 
     def __init__(self):
         self.github_token = settings.GITHUB_TOKEN
-        self.google_key_path = getattr(settings, "GOOGLE_SERVICE_ACCOUNT_JSON_PATH", None)
+        self.google_key_path = getattr(
+            settings, "GOOGLE_SERVICE_ACCOUNT_JSON_PATH", None
+        )
         self.slack_token = getattr(settings, "SLACK_BOT_TOKEN", None)
 
     def identify(self, source: str) -> IdentifiedSource:
@@ -30,7 +32,7 @@ class SourceIdentifier:
             return IdentifiedSource(
                 source_type=SourceType.GITHUB_REPO,
                 identifier=source,
-                is_verified=self._verify_github(source)
+                is_verified=self._verify_github(source),
             )
 
         # 2. Google Docs / Sheets
@@ -39,13 +41,13 @@ class SourceIdentifier:
                 return IdentifiedSource(
                     source_type=SourceType.GOOGLE_DOC,
                     identifier=source,
-                    is_verified=self._verify_google(source)
+                    is_verified=self._verify_google(source),
                 )
             elif "/spreadsheets/" in source:
                 return IdentifiedSource(
                     source_type=SourceType.GOOGLE_SHEET,
                     identifier=source,
-                    is_verified=self._verify_google(source)
+                    is_verified=self._verify_google(source),
                 )
 
         # 3. PDF File
@@ -54,7 +56,7 @@ class SourceIdentifier:
                 return IdentifiedSource(
                     source_type=SourceType.PDF_FILE,
                     identifier=source,
-                    is_verified=Path(source).exists()
+                    is_verified=Path(source).exists(),
                 )
 
         # 4. Slack (Simplified detection for Phase 1)
@@ -62,7 +64,7 @@ class SourceIdentifier:
             return IdentifiedSource(
                 source_type=SourceType.SLACK_CONVERSATION,
                 identifier=source,
-                is_verified=self._verify_slack(source)
+                is_verified=self._verify_slack(source),
             )
 
         raise UnsupportedSourceError(f"Could not identify source: {source}")
@@ -75,26 +77,30 @@ class SourceIdentifier:
         """Lightweight health check for GitHub access."""
         if not self.github_token:
             return False
-        
+
         # Extract owner/repo from URL
         parsed = urlparse(source)
         path_parts = parsed.path.strip("/").split("/")
         if len(path_parts) < 2:
             return False
-        
+
         owner, repo = path_parts[0], path_parts[1]
         api_url = f"https://api.github.com/repos/{owner}/{repo}"
         headers = {"Authorization": f"token {self.github_token}"}
-        
+
         try:
             response = requests.get(api_url, headers=headers, timeout=10)
             if response.status_code == 200:
                 return True
             elif response.status_code == 401 or response.status_code == 403:
-                raise UnauthorizedSourceError(f"Unauthorized access to GitHub repo: {source}")
+                raise UnauthorizedSourceError(
+                    f"Unauthorized access to GitHub repo: {source}"
+                )
             return False
         except requests.RequestException as e:
-            raise IngestionConnectionError(f"Failed to connect to GitHub API: {str(e)}") from e
+            raise IngestionConnectionError(
+                f"Failed to connect to GitHub API: {str(e)}"
+            ) from e
 
     def _verify_google(self, source: str) -> bool:
         """Check if Google credentials are configured and have access to the source."""
