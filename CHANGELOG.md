@@ -1,5 +1,24 @@
 # Changelog
 
+## [2026-03-10]
+
+### Summary of Smart Chunker: Universal Code Chunker
+Successfully implemented the core engines for the **Smart Chunker**, a decoupled and modular module designed for high-precision code and documentation ingestion. Developed specialized engines for Python (AST-aware), Markdown (structural), and Jupyter Notebooks, ensuring complete context preservation during the chunking process.
+
+### Added
+- **Decoupled Module Structure**: Created `src/smart_chunker/` as a standalone package with separate `base`, `schemas`, and `engines` layers for clean internal integration.
+- **Python AST Engine**: Integrated `Tree-sitter` for production-grade parsing, enabling extraction of atomic symbols (classes/functions) and inheritance tracking.
+- **Markdown Structural Engine**: Implemented heading-based splitting (H1-H3) that preserves "breadcrumb" paths for hierarchical context.
+- **Jupyter Notebook Engine**: Added support for `.ipynb` files, extracting code cells and processing them through the Python AST pipeline with cell-index metadata.
+- **Recursive Splitting Logic**: Introduced a context-aware splitting mechanism that breaks large code blocks while prepending signatures to prevent context loss.
+- **Production Test Suite**: Deployed `tests/test_smart_chunker.py` and `tests/data/` with multi-language sample files (Python, JS, PHP, Dart, MD) for end-to-end verification.
+
+### Fixed
+- **Environment Compatibility**: Resolved a `TypeError` in `tree-sitter-languages` by standardizing the `.venv` on `tree-sitter==0.21.3`.
+- **Hierarchical Indexing**: Resolved Pydantic validation issues by standardizing `chunk_index` as a string (e.g., "1.0", "1.1") to support nested symbol mapping.
+- **Dependency Map Noise**: Refined dependency extraction to exclude self-references and focus on external symbol markers (TitleCase identification).
+- **Import Portability**: Switched to absolute imports within the module to ensure compliance with standard Python packaging requirements.
+
 ## [2026-03-09]
 
 ### Summary of Smart Context Manager: Phase 1 (Source Discovery)
