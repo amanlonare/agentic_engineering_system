@@ -8,7 +8,7 @@ from src.smart_chunker.engines.markdown import MarkdownEngine
 from src.smart_chunker.engines.notebook import NotebookEngine
 from src.smart_chunker.base import SmartChunker
 
-def test_chunker():
+def run_all_tests():
     # Setup Chunker
     chunker = SmartChunker()
     chunker.register_engine("python", PythonEngine())
@@ -16,15 +16,15 @@ def test_chunker():
     chunker.register_engine("notebook", NotebookEngine())
 
     # 1. Test Python
-    test_python_chunking(chunker)
+    verify_python_chunking(chunker)
     
     # 2. Test Markdown
-    test_markdown_chunking(chunker)
+    verify_markdown_chunking(chunker)
 
     # 3. Test Notebook
-    test_notebook_chunking(chunker)
+    verify_notebook_chunking(chunker)
 
-def test_python_chunking(chunker):
+def verify_python_chunking(chunker):
     sample_code = """
 class BaseHandler:
     def handle(self):
@@ -49,7 +49,7 @@ def standalone_func(x):
         print(f"Deps: {c.metadata.dependencies}")
         print(f"Lines: {c.metadata.start_line}-{c.metadata.end_line}")
 
-def test_markdown_chunking(chunker):
+def verify_markdown_chunking(chunker):
     sample_md = """
 # Project Alpha
 Welcome to the project.
@@ -73,7 +73,7 @@ Import and call the main function.
         content_preview = c.content[:40].replace('\n', ' ')
         print(f"Start: {content_preview}...")
 
-def test_notebook_chunking(chunker):
+def verify_notebook_chunking(chunker):
     sample_nb = {
         "cells": [
             {
@@ -92,5 +92,4 @@ def test_notebook_chunking(chunker):
         print(f"Content: {c.content.strip()}")
 
 if __name__ == "__main__":
-    import json
-    test_chunker()
+    run_all_tests()
