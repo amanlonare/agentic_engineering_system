@@ -2,7 +2,7 @@ import json
 from typing import List
 
 from src.smart_chunker.base import BaseEngine
-from src.smart_chunker.engines.python_ast import PythonEngine
+from src.smart_chunker.engines.code import CodeEngine
 from src.smart_chunker.schemas import Chunk
 
 
@@ -13,7 +13,7 @@ class NotebookEngine(BaseEngine):
     """
 
     def __init__(self):
-        self.python_engine = PythonEngine()
+        self.python_engine = CodeEngine("python")
 
     def chunk(self, content: str, source_id: str, **_kwargs) -> List[Chunk]:
         try:
