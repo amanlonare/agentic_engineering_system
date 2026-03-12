@@ -1,5 +1,22 @@
 # Changelog
 
+## [2026-03-11]
+
+### Summary of Knowledge Ingestion & Advanced Retrieval
+Successfully expanded the **Smart Chunker** to support document sources (PDFs, Google Docs, Google Sheets) and transitioned the system to a hybrid knowledge store. Integrated **Kùzu Graph Database** for structural code relationships and **ChromaDB** for semantic search. Developed the **ContextRetriever** module to perform graph-augmented retrieval, enabling agents to leverage cross-file and cross-class context.
+
+### Added
+- **Unified Knowledge Store**: Integrated **Kùzu** (`GraphStore`) and **ChromaDB** (`VectorStore`) as the dual-engine backbone for long-term memory and repository context.
+- **Multi-Source Smart Chunkers**: Deployed specialized engines for `PDF` (heuristic heading detection), `Google Docs` (hierarchical structural parsing), and `Google Sheets` (tabular context injection).
+- **Language-Aware Code Engine**: Enhanced the code chunker to support **Java** and **Kotlin**, extracting `CALLS` and `INHERITS` relationships using Tree-sitter.
+- **Advanced Retrieval Module**: Implemented `ContextRetriever` which performs hybrid search (semantic hit + graph neighbor expansion) to provide 10x richer context to agents.
+- **Ingestion Pipeline**: Created a unified `src/ingestion/pipeline.py` and `fetcher.py` to automate the discovery, fetching, and indexing of entire repositories and document folders.
+- **Persistence Layer Refactoring**: Migrated `LongTermMemory` and `WorkspaceManager` to use the new unified stores, ensuring data isolation through dedicated ChromaDB collections.
+
+### Fixed
+- **Cross-Language Relationship Mapping**: Resolved Tree-sitter query issues for Java/Kotlin that were causing incorrect symbol identification.
+- **Memory Consistency**: Fixed an issue where legacy memories were being mixed with repository context by introducing isolated collection namespaces in the `VectorStore`.
+
 ## [2026-03-10]
 
 ### Summary of Smart Chunker: Universal Code Chunker

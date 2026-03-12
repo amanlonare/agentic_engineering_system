@@ -87,3 +87,6 @@ architecture/
 
 # Cloned target repositories (each has its own .git)
 .context/testing_agentic_engineering_team/
+
+# dummy data
+tests/data/pdfs

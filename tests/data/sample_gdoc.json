@@ -1,0 +1,79 @@
+{
+  "title": "Smart Chunker Implementation Guide",
+  "body": {
+    "content": [
+      {
+        "paragraph": {
+          "elements": [{"textRun": {"content": "Project Overview\n"}}],
+          "paragraphStyle": {"namedStyleType": "HEADING_1"}
+        }
+      },
+      {
+        "paragraph": {
+          "elements": [{"textRun": {"content": "This is the top-level introduction to the project. It describes the goals and objectives of the smart chunker system.\n"}}],
+          "paragraphStyle": {"namedStyleType": "NORMAL_TEXT"}
+        }
+      },
+      {
+        "paragraph": {
+          "elements": [{"textRun": {"content": "Setup Instructions\n"}}],
+          "paragraphStyle": {"namedStyleType": "HEADING_2"}
+        }
+      },
+      {
+        "paragraph": {
+          "elements": [{"textRun": {"content": "1. Clone the repository.\n2. Install dependencies using pip.\n3. Run the setup script.\n"}}],
+          "paragraphStyle": {"namedStyleType": "NORMAL_TEXT"}
+        }
+      },
+      {
+        "paragraph": {
+          "elements": [{"textRun": {"content": "Advanced Configuration\n"}}],
+          "paragraphStyle": {"namedStyleType": "HEADING_2"}
+        }
+      },
+      {
+        "paragraph": {
+          "elements": [{"textRun": {"content": "You can configure the chunker by editing the config.yaml file. There are several options available for tuning the engines.\n"}}],
+          "paragraphStyle": {"namedStyleType": "NORMAL_TEXT"}
+        }
+      },
+      {
+        "table": {
+          "tableRows": [
+            {
+              "tableCells": [
+                {"content": [{"paragraph": {"elements": [{"textRun": {"content": "Engine"}}]}}]},
+                {"content": [{"paragraph": {"elements": [{"textRun": {"content": "Priority"}}]}}]}
+              ]
+            },
+            {
+              "tableCells": [
+                {"content": [{"paragraph": {"elements": [{"textRun": {"content": "Markdown"}}]}}]},
+                {"content": [{"paragraph": {"elements": [{"textRun": {"content": "High"}}]}}]}
+              ]
+            },
+            {
+              "tableCells": [
+                {"content": [{"paragraph": {"elements": [{"textRun": {"content": "PDF"}}]}}]},
+                {"content": [{"paragraph": {"elements": [{"textRun": {"content": "Medium"}}]}}]}
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "paragraph": {
+          "elements": [{"textRun": {"content": "Conclusion\n"}}],
+          "paragraphStyle": {"namedStyleType": "HEADING_1"}
+        }
+      },
+      {
+        "paragraph": {
+          "elements": [{"textRun": {"content": "This concludes the guide. Happy chunking!\n"}}],
+          "paragraphStyle": {"namedStyleType": "NORMAL_TEXT"}
+        }
+      }
+    ]
+  }
+}

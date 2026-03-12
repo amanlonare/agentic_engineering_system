@@ -30,7 +30,7 @@ class WorkspaceManager:
             if os.path.isdir(repo_path):
                 readme_path = os.path.join(repo_path, "README.md")
                 if os.path.exists(readme_path):
-                    with open(readme_path, "r") as f:
+                    with open(readme_path, "r", encoding="utf-8") as f:
                         content = f.read()
                         # Index the content with metadata
                         self.memory.store_memory(
@@ -70,7 +70,15 @@ class WorkspaceManager:
         # 3. Semantic Fallback
         results = self.memory.retrieve_relevant_memories(task_description, k=1)
         if results:
-            repo_name = results[0].metadata.get("repo_name")
+            # Our new CompatibilityDoc stores metadata as a dict
+            repo_name = (
+                results[0].metadata.get("source_id")
+                if hasattr(results[0].metadata, "get")
+                else None
+            )
+            if not repo_name:
+                repo_name = results[0].metadata.get("repo_name")
+
             logger.info(
                 "Identified relevant repository: %s for task: %s",
                 repo_name,

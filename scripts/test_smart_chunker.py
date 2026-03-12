@@ -3,17 +3,19 @@ import os
 import json
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.smart_chunker.engines.python_ast import PythonEngine
+from src.smart_chunker.engines.code import CodeEngine
 from src.smart_chunker.engines.markdown import MarkdownEngine
 from src.smart_chunker.engines.notebook import NotebookEngine
+from src.smart_chunker.engines.pdf import PdfEngine
 from src.smart_chunker.base import SmartChunker
 
 def run_all_tests():
     # Setup Chunker
     chunker = SmartChunker()
-    chunker.register_engine("python", PythonEngine())
+    chunker.register_engine("python", CodeEngine("python"))
     chunker.register_engine("markdown", MarkdownEngine())
     chunker.register_engine("notebook", NotebookEngine())
+    chunker.register_engine("pdf", PdfEngine())
 
     # 1. Test Python
     verify_python_chunking(chunker)
@@ -23,6 +25,9 @@ def run_all_tests():
 
     # 3. Test Notebook
     verify_notebook_chunking(chunker)
+
+    # 4. Test PDF
+    verify_pdf_chunking(chunker)
 
 def verify_python_chunking(chunker):
     sample_code = """
@@ -89,7 +94,21 @@ def verify_notebook_chunking(chunker):
         print(f"\n--- Chunk {i} ({c.chunk_type}) ---")
         print(f"Symbol: {c.metadata.symbol_name}")
         print(f"Index: {c.metadata.chunk_index}")
-        print(f"Content: {c.content.strip()}")
+        print(f"Content: {c.content.strip()[:50]}...")
+
+def verify_pdf_chunking(chunker):
+    print("\n🚀 Testing PDF Chunker...")
+    path = "tests/data/sample.pdf"
+    
+    # We pass the path directly instead of raw text bytes
+    chunks = chunker.chunk(path, "spec.pdf", chunk_format="pdf")
+    
+    for i, c in enumerate(chunks):
+        print(f"\n--- Chunk {i} ({c.chunk_type}) ---")
+        print(f"Signature: {c.metadata.signature}")
+        print(f"Index: {c.metadata.chunk_index}")
+        print(f"Pages: {c.metadata.start_line}-{c.metadata.end_line}")
+        print(f"Content Preview: {c.content.strip()[:60]}...")
 
 if __name__ == "__main__":
     run_all_tests()
