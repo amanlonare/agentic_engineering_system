@@ -28,5 +28,15 @@ class Settings(BaseSettings):
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
 
+    # --- Storage: Production ---
+    CHROMA_COLLECTION_NAME: str = "rag_chunks"
+    CHROMA_DB_PATH: str = "long_term_memory/vector"
+    KUZU_DB_PATH: str = "long_term_memory/graph"
+
+    # --- Storage: Evaluation (isolated, never mixes with production) ---
+    EVAL_CHROMA_COLLECTION_NAME: str = "eval_rag_chunks"
+    EVAL_CHROMA_DB_PATH: str = "evaluation/vector"
+    EVAL_KUZU_DB_PATH: str = "evaluation/graph"
+
 
 settings = Settings()

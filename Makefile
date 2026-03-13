@@ -26,6 +26,9 @@ reset-db:
 reset-all:
 	uv run python -m src.scripts.reset_db --all
 
+eval-rag:
+	./scripts/eval_rag.sh
+
 test:
 	uv run pytest
 
@@ -41,3 +44,4 @@ clean:
 	find . -type d -name ".build" -exec rm -rf {} +
 	find . -type d -name "build" -exec rm -rf {} +
 	find . -type d -name "dist" -exec rm -rf {} +
+	find . -type d -name ".ruff_cache" -exec rm -rf {} +
