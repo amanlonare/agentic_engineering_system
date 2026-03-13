@@ -42,8 +42,53 @@ class SourceFetcher:
         elif identified_source.source_type == SourceType.SLACK_CONVERSATION:
             raise NotImplementedError("Slack fetching is not fully implemented yet.")
 
+        elif identified_source.source_type == SourceType.LOCAL_DIR:
+            return self._fetch_local_dir(identified_source.identifier)
+
         else:
             raise ValueError(f"Unknown source type: {identified_source.source_type}")
+
+    def _fetch_local_dir(self, dir_path: str) -> list:
+        """
+        Scans a local directory and returns a list of supported files.
+        """
+        results = []
+        base_path = Path(dir_path)
+        supported_extensions = {
+            ".py",
+            ".md",
+            ".ipynb",
+            ".js",
+            ".ts",
+            ".jsx",
+            ".tsx",
+            ".java",
+            ".kt",
+        }
+
+        for p in base_path.rglob("*"):
+            if p.is_file() and p.suffix.lower() in supported_extensions:
+                # Exclude noise
+                if any(
+                    x in str(p) for x in ["node_modules", "venv", ".git", "__pycache__"]
+                ):
+                    continue
+
+                try:
+                    with open(p, "r", encoding="utf-8") as f:
+                        results.append(
+                            {
+                                "path": str(p.relative_to(base_path)),
+                                "content": f.read(),
+                                "url": str(
+                                    p.absolute()
+                                ),  # Using path as URL for local files
+                            }
+                        )
+                except Exception as e:
+                    print(f"DEBUG: Failed to read local file {p}: {e}")
+
+        return results
 
     def _get_github_headers(self) -> Dict[str, str]:
         github_token = getattr(settings, "GITHUB_TOKEN", None)

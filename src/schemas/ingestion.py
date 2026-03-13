@@ -10,6 +10,7 @@ class SourceType(str, Enum):
     GOOGLE_SHEET = "google_sheet"
     SLACK_CONVERSATION = "slack_conversation"
     PDF_FILE = "pdf_file"
+    LOCAL_DIR = "local_dir"
     UNSUPPORTED = "unsupported"
 
 

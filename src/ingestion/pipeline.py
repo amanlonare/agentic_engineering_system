@@ -75,8 +75,11 @@ class IngestionPipeline:
         raw_content = self.fetcher.fetch(identified_source)
 
         # Step 3: Chunk
-        if identified_source.source_type == SourceType.GITHUB_REPO:
-            # For GitHub repos, raw_content is a list of file dicts: [{"path": str, "content": str, "url": str}]
+        if identified_source.source_type in [
+            SourceType.GITHUB_REPO,
+            SourceType.LOCAL_DIR,
+        ]:
+            # For repos or local dirs, raw_content is a list of file dicts: [{"path": str, "content": str, "url": str}]
             chunks = []
             for file_data in raw_content:
                 ext = (

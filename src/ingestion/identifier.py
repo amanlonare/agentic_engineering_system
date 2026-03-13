@@ -59,12 +59,19 @@ class SourceIdentifier:
                     is_verified=Path(source).exists(),
                 )
 
-        # 4. Slack (Simplified detection for Phase 1)
-        if re.match(r"^[C|D|G][A-Z0-9]{8,11}$", source):
+            # 4. Slack (Simplified detection for Phase 1)
             return IdentifiedSource(
                 source_type=SourceType.SLACK_CONVERSATION,
                 identifier=source,
                 is_verified=self._verify_slack(source),
+            )
+
+        # 5. Local Directory (for Evaluation/Testing)
+        if Path(source).is_dir():
+            return IdentifiedSource(
+                source_type=SourceType.LOCAL_DIR,
+                identifier=str(Path(source).absolute()),
+                is_verified=True,
             )
 
         raise UnsupportedSourceError(f"Could not identify source: {source}")

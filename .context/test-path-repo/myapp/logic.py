@@ -1,1 +1,0 @@
-def get_val(): return 'ROCK_ON'

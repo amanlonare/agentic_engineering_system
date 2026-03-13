@@ -1,5 +1,28 @@
 # Changelog
 
+## [2026-03-12]
+
+### Summary of RAG Evaluation Framework
+Implemented a comprehensive evaluation pipeline using **Ragas 0.4.x** to quantitatively assess the accuracy, relevancy, and faithfulness of the Smart Context retrieval system. Established a baseline for performance using synthetic test data and automated result visualization.
+
+### Added
+- **RAG Evaluation Suite**: Deployed an isolated evaluation environment in `evaluation/rag/` including scripts for ingestion, synthetic testset generation, and multi-metric scoring.
+- **Evaluation Automation**: Created `scripts/eval_rag.sh` and integrated `make eval-rag` to orchestrate end-to-end benchmarking in a single command.
+- **Automated Visualization**: Implemented a radar plot generator (`metrics_summary.png`) to provide visual feedback on Faithfulness, Answer Relevancy, Context Precision, and Context Recall.
+- **Evaluation Isolation**: Hardened `reset_db.py` and `Makefile` to manage isolated ChromaDB and Kùzu stores specifically for evaluation runs.
+
+### Fixed
+- **Ragas 0.4.x Compatibility**: Resolved `TypeError` and `AttributeError` by shimming legacy `embed_query` and `embed_documents` methods onto modern OpenAI embedding providers.
+- **Token Management**: Fixed response truncation by increasing context-aware `max_tokens` for Ragas LLM calls.
+- **Result Aggregation**: Resolved data-type reduction errors in result processing by enforcing numeric conversion for aggregate scores.
+- **Reset Logic**: Fixed an issue where `evaluation/graph` was not being correctly cleared during full system resets.
+
+### Evaluation Baseline (Dummy Data)
+- **Context Recall**: 0.958 (Excellent retrieval coverage)
+- **Faithfulness**: 0.866 (High output groundedness)
+- **Answer Relevancy**: 0.804 (Strong intent alignment)
+- **Context Precision**: 0.507 (High noise-to-signal ratio; identified for future reranking)
+
 ## [2026-03-11]
 
 ### Summary of Knowledge Ingestion & Advanced Retrieval

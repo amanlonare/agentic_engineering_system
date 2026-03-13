@@ -37,6 +37,41 @@ def reset_long_term_memory():
         logger.info("ℹ️ Long-term memory directory does not exist.")
 
 
+def reset_evaluation_stores():
+    """Deletes the isolated evaluation directories (vector and graph)."""
+    eval_dirs = [settings.EVAL_CHROMA_DB_PATH, settings.EVAL_KUZU_DB_PATH]
+    for eval_dir in eval_dirs:
+        if os.path.exists(eval_dir):
+            try:
+                if os.path.isdir(eval_dir):
+                    shutil.rmtree(eval_dir)
+                    logger.info(
+                        "✅ Successfully deleted evaluation directory: %s", eval_dir
+                    )
+                else:
+                    os.remove(eval_dir)
+                    logger.info("✅ Successfully deleted evaluation file: %s", eval_dir)
+            except OSError as e:
+                logger.error(
+                    "❌ Failed to delete evaluation storage %s: %s", eval_dir, e
+                )
+        else:
+            logger.info("ℹ️ Evaluation storage '%s' does not exist.", eval_dir)
+
+    # Also clean up result files in evaluation/data
+    import glob
+
+    result_files = glob.glob("./evaluation/data/*.csv") + glob.glob(
+        "./evaluation/data/*.png"
+    )
+    for f in result_files:
+        try:
+            os.remove(f)
+            logger.info("✅ Successfully deleted evaluation result file: %s", f)
+        except OSError as e:
+            logger.error("❌ Failed to delete evaluation result file %s: %s", f, e)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Reset the system state.")
     parser.add_argument(
@@ -49,5 +84,6 @@ if __name__ == "__main__":
 
     if args.all:
         reset_long_term_memory()
+        reset_evaluation_stores()
 
     logger.info("✨ Reset complete.")
