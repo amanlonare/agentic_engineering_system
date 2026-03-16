@@ -4,6 +4,7 @@ from typing import Any, List
 
 import kuzu
 
+from src.core.config import settings
 from src.schemas.ingestion import IdentifiedSource
 from src.smart_chunker.schemas import Chunk
 
@@ -15,7 +16,7 @@ class GraphStore:
     Wrapper for Kùzu Graph Database to store structural relationships.
     """
 
-    def __init__(self, db_path: str = "long_term_memory/graph"):
+    def __init__(self, db_path: str = settings.KUZU_DB_PATH):
         # Ensure the parent directory exists
         parent_dir = os.path.dirname(db_path)
         if parent_dir:

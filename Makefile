@@ -32,6 +32,9 @@ inspect-mcp:
 reset-all:
 	uv run python -m src.scripts.reset_db --all
 
+reset-eval:
+	uv run python -m src.scripts.reset_db --eval
+
 eval-rag:
 	./scripts/eval_rag.sh
 

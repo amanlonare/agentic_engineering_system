@@ -1,0 +1,11 @@
+# List of GitHub repositories to ingest
+repositories:
+  - "https://github.com/username/repo-name"
+
+# List of Google Drive documents/sheets to ingest
+google_docs:
+  - "https://docs.google.com/document/d/DOC_ID/edit"
+
+# General URLs
+urls:
+  - "https://example.com/spec"

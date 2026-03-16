@@ -18,8 +18,8 @@ class VectorStore:
 
     def __init__(
         self,
-        db_path: str = "long_term_memory/vector",
-        collection_name: str = "kb_chunks",
+        db_path: str = settings.CHROMA_DB_PATH,
+        collection_name: str = settings.CHROMA_COLLECTION_NAME,
     ):
         # Ensure the directory exists
         os.makedirs(db_path, exist_ok=True)

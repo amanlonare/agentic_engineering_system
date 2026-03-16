@@ -1,5 +1,28 @@
 # Changelog
 
+## [2026-03-16]
+
+### Summary of MCP Expansion & RAG Optimization
+Standardized the system to use the Model Context Protocol (MCP) for both context retrieval and action-oriented tasks. Integrated the **GitHub MCP Server** for issues/PR management and the **Google Drive MCP Server** for remote document discovery. Optimized the **RAG Evolution Engine** to benchmark against real remote data sources and resolved critical asynchronous test failures in the core orchestration nodes.
+
+### Added
+- **GitHub MCP Integration**: Integrated the official GitHub MCP server to provide agents with tool-based access to repository management (issues, comments, PRs).
+- **Google Drive MCP Integration**: Added support for remote Google Drive content discovery via MCP, decoupling the system from local storage requirements.
+- **Remote RAG Evaluation**: Retooling the `evaluate_rag.py` and `ingest_eval_data.py` to index and test against live remote sources (GitHub/GDrive).
+- **MCP Client Manager**: Implemented `src/core/mcp_client.py` to provide a centralized, async context manager for managing multiple MCP server connections simultaneously.
+
+### Modified
+- **Asynchronous Test Standard**: Migrated `coder`, `manual`, and `ops` deterministic tests to `anyio`-compatible async tests to resolve persistent `AttributeError` and `TypeError` issues.
+- **RAG Ingestion Routine**: Updated ingestion pipelines to prefer remote MCP-provided tools over legacy local fetchers for better architectural consistency.
+- **Secret Management Consistency**: Hardened `webhooks.py` to gracefully handle Pydantic `SecretStr` objects across all deployment environments.
+- **Evaluation Preservation**: Refined `reset_db.py` to ensure evaluation datasets and results are preserved during system resets while correctly clearing vector and graph stores.
+
+### Fixed
+- **Async Mock Chaining**: Resolved "coroutine object has no attribute" errors in `tests/test_ops_deterministic.py` by correctly shimming synchronous LangChain tool manipulation methods.
+- **Webhook Signature Validation**: Fixed HMAC validation failures caused by incorrect `SecretStr` handling.
+- **Linter Compliance**: Eliminated unused variable warnings and `FieldInfo` access errors in the API and test layers.
+
+
 ## [2026-03-13]
 
 ### Summary of MCP Integration & Structural Graph Discovery

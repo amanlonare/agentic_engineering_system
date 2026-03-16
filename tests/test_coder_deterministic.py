@@ -1,7 +1,9 @@
+import asyncio
 import logging
 import os
 import shutil
 
+import pytest
 from langchain_core.messages import HumanMessage
 
 from src.core.state import EngineeringState
@@ -41,7 +43,8 @@ def cleanup_mock_repos():
         shutil.rmtree(os.path.join(base_path, "repo-b"))
 
 
-def test_coder_deterministic():
+@pytest.mark.anyio
+async def test_coder_deterministic():
     print("\n🧪 Starting Coder Agent Deterministic Tests...")
     setup_mock_repos()
 
@@ -68,7 +71,7 @@ def test_coder_deterministic():
             approval_status=ApprovalStatus.APPROVED,
         )
 
-        result_1 = coder_node(state_1)
+        result_1 = await coder_node(state_1)
         print(f"Completed Steps: {result_1.get('completed_step_ids')}")
 
         world_txt = os.path.join(".context", "repo-a", "world.txt")
@@ -104,7 +107,7 @@ def test_coder_deterministic():
             approval_status=ApprovalStatus.APPROVED,
         )
 
-        result_2 = coder_node(state_2)
+        result_2 = await coder_node(state_2)
         final_msg = result_2["messages"][-1].content if result_2["messages"] else ""
         print(f"Agent Final Message Snippet: {final_msg[:100]}...")
 
@@ -130,4 +133,4 @@ def test_coder_deterministic():
 
 
 if __name__ == "__main__":
-    test_coder_deterministic()
+    asyncio.run(test_coder_deterministic())

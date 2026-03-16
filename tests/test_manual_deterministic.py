@@ -1,5 +1,7 @@
+import asyncio
 import logging
 
+import pytest
 from langchain_core.messages import HumanMessage
 
 from src.core.state import EngineeringState
@@ -17,7 +19,8 @@ from src.schemas.triggers import TriggerContext
 logging.basicConfig(level=logging.INFO)
 
 
-def test_deterministic_routing():
+@pytest.mark.anyio
+async def test_deterministic_routing():
     """
     Manually test the Supervisor routing logic by creating a mock state.
     """
@@ -53,7 +56,7 @@ def test_deterministic_routing():
     )
 
     print("\n--- Scenario A: Plan exists, 0 steps completed ---")
-    decision_a = supervisor_node(state_a)
+    decision_a = await supervisor_node(state_a)
     messages_a = decision_a.get("messages", [])
     reasoning_a = messages_a[0].content if messages_a else "N/A"
     print(f"Result: {decision_a.get('next_node')} | Reasoning: {reasoning_a}")
@@ -78,7 +81,7 @@ def test_deterministic_routing():
     )
 
     print("\n--- Scenario B: STEP-1 ('coder') completed ---")
-    decision_b = supervisor_node(state_b)
+    decision_b = await supervisor_node(state_b)
     messages_b = decision_b.get("messages", [])
     reasoning_b = messages_b[0].content if messages_b else "N/A"
     print(f"Result: {decision_b.get('next_node')} | Reasoning: {reasoning_b}")
@@ -104,11 +107,11 @@ def test_deterministic_routing():
     )
 
     print("\n--- Scenario C: All steps completed ---")
-    decision_c = supervisor_node(state_c)
+    decision_c = await supervisor_node(state_c)
     messages_c = decision_c.get("messages", [])
     reasoning_c = messages_c[0].content if messages_c else "N/A"
     print(f"Result: {decision_c.get('next_node')} | Reasoning: {reasoning_c}")
 
 
 if __name__ == "__main__":
-    test_deterministic_routing()
+    asyncio.run(test_deterministic_routing())

@@ -94,9 +94,16 @@ def test_webhook_ignored_action():
     assert response.json()["status"] == "ignored"
 
 
-@patch("src.api.webhooks.post_issue_comment", new_callable=AsyncMock)
-def test_webhook_valid_issue(mock_post_comment):
+@patch("src.api.webhooks.MCPClientManager")
+def test_webhook_valid_issue(mock_mcp_class):
     """Expect successful execution loop for a valid issue creation."""
+    # Setup MCP Mocks
+    mock_mcp_instance = mock_mcp_class.return_value
+    mock_mcp_instance.connect_stdio = AsyncMock()
+    mock_mcp_instance.disconnect_all = AsyncMock()
+
+    mock_session = AsyncMock()
+    mock_mcp_instance.sessions = {"github": mock_session}
     payload = {
         "action": "opened",
         "issue": {
@@ -128,9 +135,13 @@ def test_webhook_valid_issue(mock_post_comment):
     mock_workspace_manager.identify_repository.assert_called_once()
     mock_graph.stream.assert_called_once()
 
-    # Verify the callback was triggered
-    mock_post_comment.assert_called_once()
-    args, kwargs = mock_post_comment.call_args
-    assert args[0] == "owner/test-repo"  # repo
-    assert args[1] == 42  # issue_number
-    assert "Agentic Execution Completed" in args[2]  # body
+    # Verify the callback was triggered via MCP
+    mock_session.call_tool.assert_called_once()
+    call_args = mock_session.call_tool.call_args[0]
+
+    assert call_args[0] == "add_issue_comment"
+    tool_args = call_args[1]
+    assert tool_args["owner"] == "owner"
+    assert tool_args["repo"] == "test-repo"
+    assert tool_args["issue_number"] == 42
+    assert "Agentic Execution Completed" in tool_args["body"]

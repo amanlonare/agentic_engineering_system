@@ -8,7 +8,9 @@ from langchain_core.messages import (
     ToolMessage,
 )
 
+from src.core.config import settings
 from src.core.config_manager import app_config, config_manager
+from src.core.mcp_client import MCPClientManager
 from src.core.state import EngineeringState
 from src.schemas import StepExecutionRecord, StepStatus, TestReport
 from src.tools.codebase_tools import get_ops_tools
@@ -18,7 +20,7 @@ from src.utils.logger import configure_logging
 logger = configure_logging("ops")
 
 
-def ops_node(state: EngineeringState) -> Dict[str, Any]:
+async def ops_node(state: EngineeringState) -> Dict[str, Any]:
     """
     Ops Agent: Verifies code changes and deployment.
     """
@@ -98,6 +100,21 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
     tools = get_ops_tools(repo)
 
     llm = config_manager.get_agent_llm("ops")
+
+    # --- MCP Integration ---
+    mcp_manager = MCPClientManager()
+    try:
+        if settings.GITHUB_TOKEN:
+            cmd_parts = settings.GITHUB_MCP_COMMAND.split()
+            await mcp_manager.connect_stdio("github", cmd_parts[0], cmd_parts[1:])
+            remote_tools = await mcp_manager.get_langchain_tools("github")
+            tools.extend(remote_tools)
+            logger.info(
+                f"🔗 Injected {len(remote_tools)} GitHub tools via Stdio to Ops."
+            )
+    except Exception as e:
+        logger.error(f"⚠️ Failed to load local GitHub tools for Ops: {e}")
+
     llm_with_tools = llm.bind_tools(tools)
 
     messages: List[BaseMessage] = [SystemMessage(content=system_prompt)]
@@ -116,7 +133,7 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
         MAX_TOOL_CALLS = agent_cfg.max_tool_calls if agent_cfg else 10
 
         while tool_call_count < MAX_TOOL_CALLS:
-            response = llm_with_tools.invoke(messages)
+            response = await llm_with_tools.ainvoke(messages)
             messages.append(response)
 
             if not response.tool_calls:
@@ -172,7 +189,7 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
         # Invoke returns TestReport as requested by with_structured_output
         report = cast(
             TestReport,
-            structured_llm.invoke(
+            await structured_llm.ainvoke(
                 messages
                 + [
                     HumanMessage(
@@ -289,3 +306,5 @@ def ops_node(state: EngineeringState) -> Dict[str, Any]:
             "completed_step_ids": [],
             "execution_history": [],
         }
+    finally:
+        await mcp_manager.disconnect_all()

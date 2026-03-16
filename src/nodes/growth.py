@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 from langchain_core.messages import (
     AIMessage,
@@ -19,7 +19,7 @@ from src.utils.logger import configure_logging
 logger = configure_logging("growth")
 
 
-def growth_node(state: EngineeringState) -> Dict[str, Any]:
+async def growth_node(state: EngineeringState) -> Dict[str, Any]:
     """
     Growth Agent: Analyzes user metrics and proposes strategies.
     Uses LLM tool-calling to process mobility data.
@@ -63,7 +63,7 @@ def growth_node(state: EngineeringState) -> Dict[str, Any]:
     MAX_TOOL_CALLS = agent_cfg.max_tool_calls if agent_cfg else 10
 
     for _ in range(MAX_TOOL_CALLS):
-        response = llm_with_tools.invoke(messages)
+        response = await llm_with_tools.ainvoke(messages)
         messages.append(response)
 
         if not response.tool_calls:
@@ -77,7 +77,10 @@ def growth_node(state: EngineeringState) -> Dict[str, Any]:
             tool_fn = next((t for t in all_tools if t.name == tool_name), None)
             if tool_fn:
                 logger.info(f"🛠️ Executing tool: {tool_name}")
-                result = tool_fn.invoke(tool_args)
+                if hasattr(tool_fn, "ainvoke"):
+                    result = await tool_fn.ainvoke(tool_args)
+                else:
+                    result = tool_fn.invoke(tool_args)
                 messages.append(
                     ToolMessage(content=str(result), tool_call_id=tool_call["id"])
                 )
@@ -89,7 +92,7 @@ def growth_node(state: EngineeringState) -> Dict[str, Any]:
                     )
                 )
 
-    # 4. Final Structured Output
+    # Step 4: Final Structured Output
     logger.info("🎯 Generating final growth recommendation...")
     analyzer_llm = llm.with_structured_output(GrowthRecommendation)
     analysis_input = messages + [
@@ -99,11 +102,10 @@ def growth_node(state: EngineeringState) -> Dict[str, Any]:
     ]
 
     # Cast/validate the result
-    recommendation_data = analyzer_llm.invoke(analysis_input)
+    recommendation_data = await analyzer_llm.ainvoke(analysis_input)
+    recommendation = cast(GrowthRecommendation, recommendation_data)
     if isinstance(recommendation_data, dict):
         recommendation = GrowthRecommendation(**recommendation_data)
-    else:
-        recommendation = recommendation_data
 
     logger.info("📈 Final Growth Recommendation:\n%s", recommendation.analysis)
 

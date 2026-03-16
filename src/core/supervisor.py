@@ -92,7 +92,7 @@ def _check_growth_follow_up(state: EngineeringState, logger):
     return None
 
 
-def supervisor_node(state: EngineeringState) -> dict:
+async def supervisor_node(state: EngineeringState) -> dict:
     """
     The LangGraph node function that acts as the Supervisor.
     It inspects the state, queries the LLM, and returns the 'next_action'.
@@ -295,7 +295,7 @@ def supervisor_node(state: EngineeringState) -> dict:
             next_step_directive = "NO PLAN EXISTS → route to PLANNING for construction."
 
         # Explicitly invoke the chain
-        result = chain.invoke(
+        result = await chain.ainvoke(
             {
                 "trigger_type": state.trigger.type if state.trigger else "unknown",
                 "task_plan": plan_checklist if state.task_plan else "None",

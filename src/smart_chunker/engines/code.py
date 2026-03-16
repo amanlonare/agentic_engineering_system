@@ -54,11 +54,27 @@ class CodeEngine(BaseEngine):
                 (simple_identifier) @name
             ) @func
             """
+        elif self.language_name in ["javascript", "typescript", "tsx"]:
+            query_scm = """
+            (class_declaration 
+                name: (type_identifier) @name
+            ) @class
+            (function_declaration 
+                name: (identifier) @name
+            ) @func
+            (method_definition 
+                name: (property_identifier) @name
+            ) @func
+            (arrow_function) @func
+            (interface_declaration
+                name: (type_identifier) @name
+            ) @class
+            """
         else:
             # Fallback/Generic
             query_scm = """
-            (class_definition name: (identifier) @name) @class
-            (function_definition name: (identifier) @name) @func
+            (class_declaration name: (identifier) @name) @class
+            (function_declaration name: (identifier) @name) @func
             """
 
         query = self.language.query(query_scm)
@@ -78,9 +94,20 @@ class CodeEngine(BaseEngine):
                 chunk_content = content[start_byte:end_byte]
 
                 # Metadata extraction
-                name_node = node.child_by_field_name(
-                    "name"
-                ) or node.child_by_field_name("identifier")
+                name_node = (
+                    node.child_by_field_name("name")
+                    or node.child_by_field_name("identifier")
+                    or node.child_by_field_name("property_identifier")
+                )
+                if not name_node and node.type in [
+                    "interface_declaration",
+                    "class_declaration",
+                ]:
+                    # Search for type_identifier in children
+                    for child in node.children:
+                        if child.type == "type_identifier":
+                            name_node = child
+                            break
                 symbol_name = self._get_node_text(name_node, content)
 
                 # Signature extraction

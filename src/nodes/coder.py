@@ -9,7 +9,9 @@ from langchain_core.messages import (
     ToolMessage,
 )
 
+from src.core.config import settings
 from src.core.config_manager import app_config, config_manager
+from src.core.mcp_client import MCPClientManager
 from src.core.state import EngineeringState
 from src.schemas import StepExecutionRecord, StepStatus
 from src.tools.codebase_tools import get_restricted_tools
@@ -58,7 +60,7 @@ def _walk_tree(path: str, prefix: str, lines: list, current_depth: int, max_dept
         pass
 
 
-def coder_node(state: EngineeringState) -> Dict[str, Any]:
+async def coder_node(state: EngineeringState) -> Dict[str, Any]:
     """
     Coder Agent: Executes code changes using restricted tools.
     """
@@ -197,6 +199,21 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
         )
 
     tools = get_restricted_tools(repo)
+
+    # --- MCP Integration ---
+    mcp_manager = MCPClientManager()
+    try:
+        if settings.GITHUB_TOKEN:
+            cmd_parts = settings.GITHUB_MCP_COMMAND.split()
+            await mcp_manager.connect_stdio("github", cmd_parts[0], cmd_parts[1:])
+            remote_tools = await mcp_manager.get_langchain_tools("github")
+            tools.extend(remote_tools)
+            logger.info(
+                f"🔗 Injected {len(remote_tools)} GitHub tools via Stdio to Coder."
+            )
+    except Exception as e:
+        logger.error(f"⚠️ Failed to load local GitHub tools for Coder: {e}")
+
     llm = config_manager.get_agent_llm("coder")
     llm_with_tools = llm.bind_tools(tools)
 
@@ -220,7 +237,7 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
         MAX_DUP_ROUNDS = agent_cfg.max_duplicate_rounds if agent_cfg else 3
 
         while tool_call_count < MAX_TOOL_CALLS:
-            response = llm_with_tools.invoke(messages)
+            response = await llm_with_tools.ainvoke(messages)
             messages.append(response)
 
             if not response.tool_calls:
@@ -257,11 +274,16 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
                     (t for t in tools if t.name == tool_call["name"]), None
                 )
                 if tool_instance:
-                    result = str(tool_instance.invoke(tool_call["args"]))
+                    # Handle both sync and async tools
+                    if hasattr(tool_instance, "ainvoke"):
+                        result = await tool_instance.ainvoke(tool_call["args"])
+                    else:
+                        result = tool_instance.invoke(tool_call["args"])
+
                     messages.append(
                         ToolMessage(
                             tool_call_id=tool_call["id"] or "",
-                            content=result,
+                            content=str(result),
                         )
                     )
                     # Cache result for loop prevention
@@ -342,3 +364,6 @@ def coder_node(state: EngineeringState) -> Dict[str, Any]:
             "completed_step_ids": [],
             "execution_history": [],
         }
+
+    finally:
+        await mcp_manager.disconnect_all()
