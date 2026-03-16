@@ -1,5 +1,23 @@
 # Changelog
 
+## [2026-03-13]
+
+### Summary of MCP Integration & Structural Graph Discovery
+Successfully integrated the **Model Context Protocol (MCP)** to expose the "Smart Context" capabilities as standardized tools. Developed a modular MCP server using **FastMCP**, enabling external agents to interface with the knowledge engines. Enhanced the **Kùzu Graph Engine** with structural schema discovery and hardened system logging for stdio-based protocol stability.
+
+### Added
+- **MCP Server Implementation**: Deployed a dedicated modular server in `src/mcp_server/` leveraging the **FastMCP** framework. Includes specialized handling for health checks, tool registration, and resource management.
+- **Graph Schema Discovery**: Implemented `GraphStore.get_schema()` to return a complete structural map of Kùzu node/relationship tables, properties, and connections, aiding agentic graph navigation.
+- **MCP Operations Infrastructure**: Added `make run-mcp` and `make inspect-mcp` to the `Makefile` to streamline server lifecycle management and protocol inspection.
+
+### Modified
+- **Logging for Stdio Compatibility**: Refactored `src/utils/logger.py` to route all diagnostic logs to `sys.stderr`, ensuring the `sys.stdout` stream remains reserved for MCP JSON-RPC communication.
+- **License Header Skill**: Overhauled `.agent/skills/license-header-adder/SKILL.md` with support for multi-language comment syntax (C-style, Hash-style, XML-style) and refined procedural instructions.
+- **System Dependencies**: Added `mcp[cli]` to `pyproject.toml` and synchronized `uv.lock` to support the new protocol layers.
+
+### Removed
+- **Evaluation Artifact Clean-up**: Purged legacy evaluation data (`results.csv`, `metrics_summary.png`) and isolated vector stores to maintain workspace cleanliness.
+
 ## [2026-03-12]
 
 ### Summary of RAG Evaluation Framework

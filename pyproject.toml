@@ -35,4 +35,5 @@ dependencies = [
     "ragas>=0.4.3",
     "rapidfuzz>=3.14.3",
     "matplotlib>=3.10.8",
+    "mcp[cli]>=1.26.0",
 ]

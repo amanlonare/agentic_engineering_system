@@ -23,6 +23,12 @@ run:
 reset-db:
 	uv run python -m src.scripts.reset_db
 
+run-mcp:
+	uv run python -m src.mcp_server.main
+
+inspect-mcp:
+	npx @modelcontextprotocol/inspector uv --quiet run python -m src.mcp_server.main
+
 reset-all:
 	uv run python -m src.scripts.reset_db --all
 

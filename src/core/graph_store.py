@@ -229,3 +229,118 @@ class GraphStore:
         except Exception as e:
             logger.warning("Source tree query failed for %s: %s", source_id, e)
         return results
+
+    def get_schema(self) -> str:
+        """
+        Returns a detailed structural schema of the graph,
+        including node/rel tables, properties, and relationship connections.
+        """
+        try:
+            # 1. Get all table names and types
+            res: Any = self.conn.execute("CALL SHOW_TABLES() RETURN name, type")
+            if isinstance(res, list):
+                res = res[0]
+
+            node_tables = []
+            rel_tables = []
+            while res.has_next():
+                row = res.get_next()
+                if row[1].upper() == "NODE":
+                    node_tables.append(row[0])
+                else:
+                    rel_tables.append(row[0])
+
+            output = ["### Kùzu Knowledge Graph Schema ###\n"]
+
+            # 2. Node Tables
+            output.append("## NODE TABLES")
+            for table in node_tables:
+                output.append(f"### {table}")
+                try:
+                    info_res: Any = self.conn.execute(
+                        f"CALL TABLE_INFO('{table}') RETURN *"
+                    )
+                    if isinstance(info_res, list):
+                        info_res = info_res[0]
+
+                    col_names = []
+                    try:
+                        col_names = [c.lower() for c in info_res.get_column_names()]
+                    except Exception:
+                        pass
+
+                    while info_res.has_next():
+                        row = info_res.get_next()
+                        p_name, p_type, is_pk = "unknown", "unknown", False
+
+                        if col_names:
+                            if "name" in col_names:
+                                p_name = row[col_names.index("name")]
+                            if "type" in col_names:
+                                p_type = row[col_names.index("type")]
+                            # In some 0.11.x, the column name might be 'is_primary_key' or 'primary_key'
+                            pk_idx = next(
+                                (i for i, c in enumerate(col_names) if "primary" in c),
+                                -1,
+                            )
+                            if pk_idx != -1:
+                                is_pk = row[pk_idx] is True
+                        else:
+                            # SDK Source confirms: row[1] is name, row[2] is type, row[4] is PK
+                            if len(row) > 1:
+                                p_name = row[1]
+                            if len(row) > 2:
+                                p_type = row[2]
+                            if len(row) > 4:
+                                is_pk = row[4] is True
+
+                        pk_str = " (PRIMARY KEY)" if is_pk else ""
+                        output.append(f"  - {p_name}: {p_type}{pk_str}")
+                except Exception as e:
+                    output.append(f"  - (Error fetching table info: {e})")
+                output.append("")
+
+            # 3. Relationship Tables
+            output.append("## RELATIONSHIP TABLES")
+            for table in rel_tables:
+                output.append(f"### {table}")
+
+                # Get properties
+                try:
+                    info_res: Any = self.conn.execute(
+                        f"CALL TABLE_INFO('{table}') RETURN *"
+                    )
+                    if isinstance(info_res, list):
+                        info_res = info_res[0]
+                    while info_res.has_next():
+                        row = info_res.get_next()
+                        output.append(f"  - {row[1]}: {row[2]}")
+                except Exception:
+                    pass
+
+                # Get connections (FROM/TO) using show_connection('table')
+                try:
+                    conn_res: Any = self.conn.execute(
+                        f"CALL SHOW_CONNECTION('{table}') RETURN *"
+                    )
+                    if isinstance(conn_res, list):
+                        conn_res = conn_res[0]
+
+                    while conn_res.has_next():
+                        c_row = conn_res.get_next()
+                        # SDK Source confirms: row[0] is src, row[1] is dst
+                        if len(c_row) >= 2:
+                            output.append(
+                                f"  - CONNECTION: ({c_row[0]}) -> ({c_row[1]})"
+                            )
+                except Exception as e:
+                    logger.warning(
+                        "Could not retrieve connection info for %s: %s", table, e
+                    )
+                    output.append(f"  - (Connection info unavailable: {e})")
+                output.append("")
+
+            return "\n".join(output)
+        except Exception as e:
+            logger.error("Failed to retrieve graph schema: %s", e)
+            return f"Error retrieving detailed schema: {str(e)}"

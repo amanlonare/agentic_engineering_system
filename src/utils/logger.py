@@ -42,7 +42,7 @@ def configure_logging(name: str = "system"):
     logger.setLevel(logging.INFO)
 
     if not logger.handlers:
-        handler = logging.StreamHandler(sys.stdout)
+        handler = logging.StreamHandler(sys.stderr)
         handler.setFormatter(ColoredFormatter())
         logger.addHandler(handler)
         logger.propagate = False
