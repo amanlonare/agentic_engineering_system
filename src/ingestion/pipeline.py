@@ -1,4 +1,7 @@
+from pathlib import Path
 from typing import List, Optional
+
+import yaml
 
 from src.core.graph_store import GraphStore
 from src.core.vector_store import VectorStore
@@ -17,6 +20,27 @@ from src.smart_chunker.schemas import Chunk
 
 class IngestionPipeline:
     """Orchestrates source identification, fetching, and chunking."""
+
+    @staticmethod
+    def load_sources_from_yaml(file_path: str) -> List[str]:
+        """Loads source URLs from a YAML file."""
+        path = Path(file_path)
+        if not path.exists():
+            return []
+
+        with open(path, "r") as f:
+            data = yaml.safe_load(f)
+
+        if not data:
+            return []
+
+        sources = []
+        # Flatten all sections (repositories, google_docs, urls) into a single list
+        for section in ["repositories", "google_docs", "urls"]:
+            if section in data and isinstance(data[section], list):
+                sources.extend(data[section])
+
+        return sources
 
     def __init__(
         self,
@@ -43,6 +67,11 @@ class IngestionPipeline:
             self.chunker.register_engine("gdoc", GDocEngine())
             self.chunker.register_engine("gsheet", GSheetEngine())
 
+    async def close(self):
+        """Clean up resources like MCP connections."""
+        if hasattr(self.fetcher, "mcp_manager"):
+            await self.fetcher.mcp_manager.disconnect_all()
+
     def _map_source_to_engine(self, source_type: SourceType) -> str:
         """Maps an internal SourceType to the appropriate chunk engine format name."""
         mapping = {
@@ -57,7 +86,7 @@ class IngestionPipeline:
             )
         return mapping[source_type]
 
-    def process(self, source_url: str) -> List[Chunk]:
+    async def process(self, source_url: str) -> List[Chunk]:
         """
         End-to-end processing pipeline:
         1. Identify the source.
@@ -72,7 +101,7 @@ class IngestionPipeline:
             )
 
         # Step 2: Fetch
-        raw_content = self.fetcher.fetch(identified_source)
+        raw_content = await self.fetcher.fetch(identified_source)
 
         # Step 3: Chunk
         if identified_source.source_type in [

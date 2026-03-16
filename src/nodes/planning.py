@@ -12,7 +12,7 @@ from src.utils.logger import configure_logging
 logger = configure_logging("planning")
 
 
-def planning_node(state: EngineeringState) -> Dict[str, Any]:
+async def planning_node(state: EngineeringState) -> Dict[str, Any]:
     """
     Planning Agent: Designs technical implementation plans.
 
@@ -50,13 +50,13 @@ def planning_node(state: EngineeringState) -> Dict[str, Any]:
 
     try:
         # Step 1: Allow the agent to call tools
-        response = llm_with_tools.invoke(messages)
+        response = await llm_with_tools.ainvoke(messages)
         messages.append(response)
 
         if response.tool_calls:
             for tool_call in response.tool_calls:
                 if tool_call["name"] == "read_file":
-                    result = read_file.invoke(tool_call["args"])
+                    result = await read_file.ainvoke(tool_call["args"])
                     messages.append(
                         {
                             "role": "tool",
@@ -73,7 +73,7 @@ def planning_node(state: EngineeringState) -> Dict[str, Any]:
 
         # Step 2: Final structured output call
         logger.info("📋 Generating structured TechnicalPlan...")
-        plan: Any = structured_llm.invoke(messages)
+        plan: Any = await structured_llm.ainvoke(messages)
 
         # 🚨 STRUCTURAL ENFORCEMENT: Force a final Git push step for repo tasks
         repo_name = (

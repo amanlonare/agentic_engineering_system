@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from langchain_core.messages import HumanMessage
 
@@ -15,7 +15,7 @@ from src.schemas import (
 )
 
 
-class TestOpsDeterministic(unittest.TestCase):
+class TestOpsDeterministic(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         # Setup a mock state
         self.step_1 = ExecutionStep(
@@ -37,7 +37,7 @@ class TestOpsDeterministic(unittest.TestCase):
     @patch("src.nodes.ops.get_ops_tools")
     @patch("src.nodes.ops.load_agent_persona")
     @patch("src.nodes.ops.build_system_prompt")
-    def test_ops_successful_verification(
+    async def test_ops_successful_verification(
         self, mock_build_prompt, mock_load_persona, mock_get_tools, mock_get_agent_llm
     ):
 
@@ -50,7 +50,7 @@ class TestOpsDeterministic(unittest.TestCase):
         mock_get_tools.return_value = [mock_tool]
 
         # Mock LLM behavior for tool calling loop
-        mock_llm_instance = MagicMock()
+        mock_llm_instance = AsyncMock()
 
         # First call returns a tool call
         tool_call_resp = MagicMock()
@@ -63,13 +63,13 @@ class TestOpsDeterministic(unittest.TestCase):
         final_resp.tool_calls = []
         final_resp.content = "Everything looks good."
 
-        mock_llm_instance.invoke.side_effect = [tool_call_resp, final_resp]
+        mock_llm_instance.ainvoke.side_effect = [tool_call_resp, final_resp]
 
-        # Bind tools mock
-        mock_llm_instance.bind_tools.return_value = mock_llm_instance
+        # Bind tools mock (must be MagicMock because it's synchronous in LangChain)
+        mock_llm_instance.bind_tools = MagicMock(return_value=mock_llm_instance)
 
         # Mock structured output for TestReport
-        mock_structured_llm = MagicMock()
+        mock_structured_llm = AsyncMock()
         mock_report = TestReport(
             suite_name="Auth Verification",
             total_tests=1,
@@ -78,10 +78,12 @@ class TestOpsDeterministic(unittest.TestCase):
             logs="Inspected AuthService.js, looks correct.",
             success=True,
         )
-        mock_structured_llm.invoke.return_value = mock_report
+        mock_structured_llm.ainvoke.return_value = mock_report
 
         # Configure mock_get_agent_llm to return our instances
-        mock_llm_instance.with_structured_output.return_value = mock_structured_llm
+        mock_llm_instance.with_structured_output = MagicMock(
+            return_value=mock_structured_llm
+        )
         mock_get_agent_llm.return_value = mock_llm_instance
 
         # 2. Execute Node
@@ -93,7 +95,7 @@ class TestOpsDeterministic(unittest.TestCase):
             trigger=self.trigger,
         )
 
-        result = ops_node(state)
+        result = await ops_node(state)
 
         # 3. Assertions
         self.assertEqual(result["completed_step_ids"], ["STEP-1"])
@@ -108,16 +110,15 @@ class TestOpsDeterministic(unittest.TestCase):
 
     @patch("src.nodes.ops.config_manager.get_agent_llm")
     @patch("src.nodes.ops.get_ops_tools")
-    def test_ops_failure_verification(self, mock_get_tools, mock_get_agent_llm):
+    async def test_ops_failure_verification(self, mock_get_tools, mock_get_agent_llm):
         # Mock failure scenario
 
-        mock_llm_instance = MagicMock()
-        mock_llm_instance.invoke.return_value = MagicMock(
+        mock_llm_instance = AsyncMock()
+        mock_llm_instance.ainvoke.return_value = MagicMock(
             tool_calls=[], content="Logic error found."
         )
-        mock_llm_instance.bind_tools.return_value = mock_llm_instance
+        mock_llm_instance.bind_tools = MagicMock(return_value=mock_llm_instance)
 
-        mock_structured_llm = MagicMock()
         mock_report = TestReport(
             suite_name="Auth Verification",
             total_tests=1,
@@ -130,8 +131,11 @@ class TestOpsDeterministic(unittest.TestCase):
             logs="Found a missing null check.",
             success=False,
         )
-        mock_structured_llm.invoke.return_value = mock_report
-        mock_llm_instance.with_structured_output.return_value = mock_structured_llm
+        mock_structured_llm = AsyncMock()
+        mock_structured_llm.ainvoke.return_value = mock_report
+        mock_llm_instance.with_structured_output = MagicMock(
+            return_value=mock_structured_llm
+        )
         mock_get_agent_llm.return_value = mock_llm_instance
 
         state = EngineeringState(
@@ -142,7 +146,7 @@ class TestOpsDeterministic(unittest.TestCase):
             trigger=self.trigger,
         )
 
-        result = ops_node(state)
+        result = await ops_node(state)
 
         self.assertEqual(
             result["completed_step_ids"], []

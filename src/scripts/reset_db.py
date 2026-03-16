@@ -58,24 +58,20 @@ def reset_evaluation_stores():
         else:
             logger.info("ℹ️ Evaluation storage '%s' does not exist.", eval_dir)
 
-    # Also clean up result files in evaluation/data
-    import glob
-
-    result_files = glob.glob("./evaluation/data/*.csv") + glob.glob(
-        "./evaluation/data/*.png"
+    logger.info(
+        "✅ Evaluation stores (vector/graph) reset. Results and test sets preserved."
     )
-    for f in result_files:
-        try:
-            os.remove(f)
-            logger.info("✅ Successfully deleted evaluation result file: %s", f)
-        except OSError as e:
-            logger.error("❌ Failed to delete evaluation result file %s: %s", f, e)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Reset the system state.")
     parser.add_argument(
-        "--all", action="store_true", help="Reset everything including memory."
+        "--all",
+        action="store_true",
+        help="Reset everything including memory (except evaluation).",
+    )
+    parser.add_argument(
+        "--eval", action="store_true", help="Reset evaluation stores and results."
     )
     args = parser.parse_args()
 
@@ -84,6 +80,9 @@ if __name__ == "__main__":
 
     if args.all:
         reset_long_term_memory()
+        reset_evaluation_stores()
+
+    if args.eval:
         reset_evaluation_stores()
 
     logger.info("✨ Reset complete.")

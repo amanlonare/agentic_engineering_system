@@ -90,3 +90,5 @@ architecture/
 
 # dummy data
 tests/data/pdfs
+# Ingestion Sources (Sensitive)
+ingestion_sources.yaml

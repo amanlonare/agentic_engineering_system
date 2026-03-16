@@ -6,7 +6,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.ingestion.pipeline import IngestionPipeline
 
-def run_test():
+import asyncio
+
+async def run_test():
     pipeline = IngestionPipeline()
     
     # Test with a local PDF first as it's easiest to verify
@@ -15,7 +17,7 @@ def run_test():
         print(f"❌ Test PDF not found at {test_pdf}. Skipping PDF test.")
     else:
         print(f"🎬 Processing PDF: {test_pdf}")
-        chunks = pipeline.process(test_pdf)
+        chunks = await pipeline.process(test_pdf)
         print(f"✅ Generated {len(chunks)} chunks.")
 
     # 2. Verify Graph Data
@@ -46,4 +48,4 @@ def run_test():
             print(res.get_next())
 
 if __name__ == "__main__":
-    run_test()
+    asyncio.run(run_test())

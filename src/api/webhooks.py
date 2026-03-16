@@ -3,14 +3,15 @@ import hmac
 import json
 import uuid
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables.config import RunnableConfig
 
 from src.api.dependencies import get_graph, get_workspace_manager
-from src.api.github_client import post_issue_comment
 from src.core.config import settings
+from src.core.mcp_client import MCPClientManager
 from src.core.state import EngineeringState
 from src.core.workspace import WorkspaceManager
 from src.schemas import TriggerContext, TriggerType
@@ -22,10 +23,16 @@ router = APIRouter()
 
 def verify_signature(payload_body: bytes, signature_header: str | None) -> bool:
     """Verifies the HMAC-SHA256 signature from GitHub."""
-    secret = settings.GITHUB_WEBHOOK_SECRET
-    if not secret:
+    secret_raw: Any = settings.GITHUB_WEBHOOK_SECRET
+    if not secret_raw:
         # If no secret is configured, we can't secure the endpoint. Decline.
         return False
+
+    # Handle Pydantic SecretStr or similar wrapper safely
+    if hasattr(secret_raw, "get_secret_value"):
+        secret = str(secret_raw.get_secret_value())
+    else:
+        secret = str(secret_raw)
 
     if not signature_header:
         # Missing signature
@@ -36,8 +43,11 @@ def verify_signature(payload_body: bytes, signature_header: str | None) -> bool:
         return False
 
     # Compute expected signature
+    secret_str = str(secret)
     expected_hash = hmac.new(
-        secret.encode("utf-8"), payload_body, hashlib.sha256
+        secret_str.encode("utf-8"),
+        payload_body,
+        hashlib.sha256,  # pylint: disable=no-member
     ).hexdigest()
     expected_signature = f"sha256={expected_hash}"
 
@@ -193,8 +203,33 @@ async def github_webhook(
 
         comment_body = f"### {status_emoji} {status_title}\n\n{body_content}\n\n*Thread ID: `{thread_id}`*"
 
-        # Async HTTP post
-        await post_issue_comment(repo_full_name, issue_number, comment_body)
+        # Use MCP to post the comment
+
+        mcp_manager = MCPClientManager()
+        try:
+            cmd_str = str(settings.GITHUB_MCP_COMMAND)
+            cmd_parts = cmd_str.split()
+            await mcp_manager.connect_stdio("github", cmd_parts[0], cmd_parts[1:])
+
+            owner, repo_name = repo_full_name.split("/")
+            await mcp_manager.sessions["github"].call_tool(
+                "add_issue_comment",
+                {
+                    "owner": owner,
+                    "repo": repo_name,
+                    "issue_number": issue_number,
+                    "body": comment_body,
+                },
+            )
+            logger.info(
+                "✅ Successfully posted MCP comment to %s#%s",
+                repo_full_name,
+                issue_number,
+            )
+        except Exception as e:
+            logger.error("❌ Failed to post MCP comment: %s", str(e))
+        finally:
+            await mcp_manager.disconnect_all()
 
         return {"status": "success" if success else "failed", "thread_id": thread_id}
     else:

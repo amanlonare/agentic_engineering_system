@@ -13,7 +13,7 @@ async def index_source(source_url: str) -> str:
     """
     try:
         logger.info("Starting ingestion for: %s", source_url)
-        chunks = pipeline.process(source_url)
+        chunks = await pipeline.process(source_url)
         return f"✅ Successfully indexed {source_url}. Generated {len(chunks)} context chunks."
     except Exception as e:
         logger.error("Ingestion failed: %s", e)

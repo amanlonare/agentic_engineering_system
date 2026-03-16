@@ -5,7 +5,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.ingestion.pipeline import IngestionPipeline
 
-def run_test():
+import asyncio
+
+async def run_test():
     pipeline = IngestionPipeline()
     
     # Test with a local PDF
@@ -15,7 +17,7 @@ def run_test():
         return
 
     print(f"🎬 Processing PDF for ChromaDB: {test_pdf}")
-    pipeline.process(test_pdf)
+    await pipeline.process(test_pdf)
     
     # 2. Verify ChromaDB Data
     print("\n🔍 Verifying ChromaDB Semantic Search...")
@@ -37,4 +39,4 @@ def run_test():
         print("❌ No results found in ChromaDB.")
 
 if __name__ == "__main__":
-    run_test()
+    asyncio.run(run_test())

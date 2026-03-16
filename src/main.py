@@ -1,7 +1,4 @@
-"""
-Entry point for the Agentic Engineering System.
-"""
-
+import asyncio
 import uuid
 from datetime import datetime
 
@@ -19,11 +16,11 @@ from src.utils.logger import configure_logging
 logger = configure_logging()
 
 
-def main():
+async def main():
     """Application entry point."""
     logger.info("🚀 Starting Agentic Engineering System (Interactive Mode)...")
 
-    # Initialize WorkspaceManager forrepo discovery
+    # Initialize WorkspaceManager for repo discovery
     wm = WorkspaceManager()
 
     db_path = settings.DATABASE_URL.replace("sqlite:///", "")
@@ -32,7 +29,10 @@ def main():
 
         while True:
             try:
-                user_input = input("\n👤 User Request (or 'exit'): ")
+                # We use asyncio to run input in a thread to keep the loop responsive
+                user_input = await asyncio.get_event_loop().run_in_executor(
+                    None, lambda: input("\n👤 User Request (or 'exit'): ")
+                )
                 if user_input.lower() in ["exit", "quit"]:
                     break
 
@@ -59,8 +59,8 @@ def main():
                 logger.info("🧵 Thread ID: %s", thread_id)
                 logger.info("🔍 Target Repo: %s", repo if repo else "General/Multiple")
 
-                # 4. Invoke the graph
-                for event in graph.stream(initial_state, config):
+                # 4. Invoke the graph asynchronously
+                async for event in graph.astream(initial_state, config):
                     for node_name, node_state in event.items():
                         logger.info(f"--- Finished node: {node_name} ---")
                         # We log internal status, but in a real CLI we might filter this
@@ -80,4 +80,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
