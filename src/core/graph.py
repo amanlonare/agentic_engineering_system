@@ -34,7 +34,7 @@ def build_graph(checkpointer=None):
     # The workflow always starts at the supervisor
     builder.add_edge(START, NodeName.SUPERVISOR)
 
-    # The supervisor uses conditional edges to route to the workers based on 'next_action'
+    # The supervisor uses conditional edges to route to workers based on 'next_action'
     builder.add_conditional_edges(
         NodeName.SUPERVISOR,
         lambda state: state.next_action,

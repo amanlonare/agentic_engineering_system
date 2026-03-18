@@ -28,41 +28,41 @@ class CodeEngine(BaseEngine):
         # Query for classes and functions
         if self.language_name == "python":
             query_scm = """
-            (class_definition 
+            (class_definition
                 name: (identifier) @name
                 superclasses: (argument_list)? @inherits
             ) @class
-            (function_definition 
+            (function_definition
                 name: (identifier) @name
             ) @func
             """
         elif self.language_name == "java":
             query_scm = """
-            (class_declaration 
+            (class_declaration
                 name: (identifier) @name
             ) @class
-            (method_declaration 
+            (method_declaration
                 name: (identifier) @name
             ) @func
             """
         elif self.language_name == "kotlin":
             query_scm = """
-            (class_declaration 
+            (class_declaration
                 (type_identifier) @name
             ) @class
-            (function_declaration 
+            (function_declaration
                 (simple_identifier) @name
             ) @func
             """
         elif self.language_name in ["javascript", "typescript", "tsx"]:
             query_scm = """
-            (class_declaration 
+            (class_declaration
                 name: (type_identifier) @name
             ) @class
-            (function_declaration 
+            (function_declaration
                 name: (identifier) @name
             ) @func
-            (method_definition 
+            (method_definition
                 name: (property_identifier) @name
             ) @func
             (arrow_function) @func
@@ -184,7 +184,7 @@ class CodeEngine(BaseEngine):
         max_chars: int,
         chunk_type: ChunkType,
     ) -> List[Chunk]:
-        """Splits a large chunk into smaller ones, prepending the signature for context."""
+        """Splits large chunks into smaller ones, prepending signature for context."""
         lines = content.split("\n")
         sub_chunks = []
         current_batch = [signature, "# ... (continued)"]
@@ -228,9 +228,7 @@ class CodeEngine(BaseEngine):
         return sub_chunks
 
     def _extract_dependencies(self, node, content: str, self_name: str) -> List[str]:
-        """
-        Extracts identifiers that look like dependencies (CamelCase or calls) within the node.
-        """
+        """Extracts identifiers that look like dependencies within the node."""
         if self.language_name == "python":
             query_scm = """
             (call function: (identifier) @call)

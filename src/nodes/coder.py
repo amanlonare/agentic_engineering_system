@@ -146,7 +146,10 @@ async def coder_node(state: EngineeringState) -> Dict[str, Any]:
                     step_id=failed_ops_step_id,
                     status=StepStatus.COMPLETED,  # Marked as 'completed' by coder fix
                     agent="coder",
-                    outcome=f"Applied fixes for verification failure in {failed_ops_step_id}.",
+                    outcome=(
+                        f"Applied fixes for verification failure in "
+                        f"{failed_ops_step_id}."
+                    ),
                 )
             ]
             completed_ids = []  # Ops step status is enough to move forward
@@ -178,7 +181,7 @@ async def coder_node(state: EngineeringState) -> Dict[str, Any]:
 
     # PRESERVE instructions and provide clear context
     full_instructions = (
-        f"### REPOSITORY STRUCTURE (pre-loaded — do NOT call list_directory for these)\n"
+        f"### REPOSITORY STRUCTURE (do NOT call list_directory for these)\n"
         f"```\n{repo_tree}\n```\n\n"
         f"### WORKFLOW CONTEXT\n"
         f"{rework_context}{task_info}\n\n"
@@ -262,8 +265,10 @@ async def coder_node(state: EngineeringState) -> Dict[str, Any]:
                         ToolMessage(
                             tool_call_id=tool_call["id"] or "",
                             content=(
-                                f"⚠️ SUCCESS: You already called this and it succeeded (Result: {prev_result[:100]}...).\n"
-                                f"Do NOT repeat the same write_file. If you're done, summarize and finish."
+                                f"⚠️ SUCCESS: You already called this and it succeeded "
+                                f"(Result: {prev_result[:80]}...).\n"
+                                f"Do NOT repeat the same write_file. If you're done, "
+                                f"summarize and finish."
                             ),
                         )
                     )
@@ -311,7 +316,10 @@ async def coder_node(state: EngineeringState) -> Dict[str, Any]:
                     )
                     messages.append(
                         AIMessage(
-                            content="Exploration complete. I will now proceed to implement the required code."
+                            content=(
+                                "Exploration complete. I will now proceed to "
+                                "implement the required code."
+                            )
                         )
                     )
                     break
@@ -321,7 +329,10 @@ async def coder_node(state: EngineeringState) -> Dict[str, Any]:
             tool_call_count += 1
 
         if tool_call_count >= MAX_TOOL_CALLS:
-            error_msg = f"⚠️ Coder Agent reached max tool calls ({MAX_TOOL_CALLS}). Forcing stop."
+            error_msg = (
+                f"⚠️ Coder Agent reached max tool calls "
+                f"({MAX_TOOL_CALLS}). Forcing stop."
+            )
             logger.warning(error_msg)
             messages.append(AIMessage(content=error_msg))
             # NOTE: We still return history so the Supervisor can see the Coder "attempted" rework.
@@ -351,7 +362,7 @@ async def coder_node(state: EngineeringState) -> Dict[str, Any]:
             # Only return the FINAL summary message to shared state, not all internal tool calls.
             "messages": [messages[-1]],
             "completed_step_ids": completed_ids,
-            "execution_history": history,  # Always return history, even if truncated by tool cap
+            "execution_history": history,  # Always return history
             "verification_scripts": script_matches,
         }
 

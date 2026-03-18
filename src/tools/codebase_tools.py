@@ -164,8 +164,7 @@ def get_restricted_tools(restriction_scope: str) -> list:
         except PermissionError as e:
             error_msg = (
                 f"ERROR: File was NOT written. {e}. "
-                f"You MUST use the full path starting with '.context/{restriction_scope}/' "
-                f"(e.g., '.context/{restriction_scope}/package.json')."
+                f"Use the full path starting with '.context/{restriction_scope}/'."
             )
             logger.error(
                 f"🚫 Restricted Tool: Path rejected for '{path}' — {error_msg}"
@@ -208,24 +207,26 @@ def get_restricted_tools(restriction_scope: str) -> list:
         StructuredTool.from_function(
             func=restricted_read_file,
             name="read_file",
-            description="Read the contents of a specific file from the repository context. Use to understand existing code.",
+            description=(
+                "Read file contents from repository context. "
+                "Use to understand existing code."
+            ),
             args_schema=FilePathArgs,
         ),
         StructuredTool.from_function(
             func=restricted_write_file,
             name="write_file",
             description=(
-                f"Write or overwrite a file with new content. "
-                f"Path MUST start with '.context/{restriction_scope}/' "
-                f"(e.g., '.context/{restriction_scope}/src/MyComponent.js'). "
-                "Files written outside this prefix will be REJECTED."
+                f"Write or overwrite a file. "
+                f"Path MUST start with '.context/{restriction_scope}/'. "
+                "Files outside this prefix will be REJECTED."
             ),
             args_schema=WriteFileArgs,
         ),
         StructuredTool.from_function(
             func=restricted_list_directory,
             name="list_directory",
-            description="List the contents of a directory to explore the repository structure.",
+            description="List directory contents to explore repository structure.",
             args_schema=FilePathArgs,
         ),
     ]
@@ -256,7 +257,9 @@ def get_ops_tools(restriction_scope: str) -> list:
 
     class ExecuteCommandArgs(BaseModel):
         command: str = Field(
-            description="The shell command to execute (e.g., 'pytest', 'flake8', 'python -m unittest')"
+            description=(
+                "Shell command (e.g., 'pytest', 'flake8', 'python -m unittest')"
+            )
         )
 
     def restricted_read_file(path: str) -> str:
@@ -299,7 +302,10 @@ def get_ops_tools(restriction_scope: str) -> list:
 
         # Ensure the directory actually exists before trying to run commands in it
         if not os.path.exists(base_dir):
-            return f"Error: The repository directory '{restriction_scope}' does not exist directly. Cannot run commands."
+            return (
+                f"Error: The repository directory '{restriction_scope}' "
+                f"does not exist directly. Cannot run commands."
+            )
 
         try:
             # Run from repo root (.context/{repo}/). PYTHONPATH ensures absolute imports work.
@@ -344,19 +350,22 @@ def get_ops_tools(restriction_scope: str) -> list:
         StructuredTool.from_function(
             func=restricted_read_file,
             name="read_file",
-            description="Read the contents of a specific file. Use to inspect the Coder's implementation.",
+            description="Read file contents. Use to inspect implementation.",
             args_schema=FilePathArgs,
         ),
         StructuredTool.from_function(
             func=restricted_list_directory,
             name="list_directory",
-            description="List the contents of a directory to explore the repository structure.",
+            description="List directory contents to explore repository structure.",
             args_schema=FilePathArgs,
         ),
         StructuredTool.from_function(
             func=restricted_execute_command,
             name="execute_command",
-            description="Execute a shell command (like tests or linters) inside the isolated repository directory. Use this to actively verify code.",
+            description=(
+                "Execute a shell command (like tests or linters) "
+                "inside the isolated repository directory."
+            ),
             args_schema=ExecuteCommandArgs,
         ),
     ]

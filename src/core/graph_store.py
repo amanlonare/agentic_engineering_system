@@ -49,18 +49,21 @@ class GraphStore:
             )
         if "Document" not in tables:
             self.conn.execute(
-                "CREATE NODE TABLE Document(path STRING, language STRING, PRIMARY KEY(path))"
+                "CREATE NODE TABLE Document(path STRING, language STRING, "
+                "PRIMARY KEY(path))"
             )
         if "Chunk" not in tables:
             self.conn.execute(
-                "CREATE NODE TABLE Chunk(chunk_id STRING, symbol_name STRING, chunk_type STRING, PRIMARY KEY(chunk_id))"
+                "CREATE NODE TABLE Chunk(chunk_id STRING, symbol_name STRING, "
+                "chunk_type STRING, PRIMARY KEY(chunk_id))"
             )
 
         # Rel Tables
         if "CONTAINS" not in tables:
             # First hops
             self.conn.execute(
-                "CREATE REL TABLE CONTAINS(FROM Source TO Document, FROM Document TO Chunk, FROM Chunk TO Chunk)"
+                "CREATE REL TABLE CONTAINS(FROM Source TO Document, "
+                "FROM Document TO Chunk, FROM Chunk TO Chunk)"
             )
         if "INHERITS" not in tables:
             self.conn.execute("CREATE REL TABLE INHERITS(FROM Chunk TO Chunk)")
@@ -77,7 +80,7 @@ class GraphStore:
     def upsert_chunks(self, source: IdentifiedSource, chunks: List[Chunk]):
         """
         Idempotently adds Document and Chunk nodes and their relationships.
-        Uses a two-pass approach to ensure all target nodes exist before creating reference edges.
+        Two-pass approach: ensure all target nodes exist before reference edges.
         """
         # Pass 1: Create all nodes and structural relationships (CONTAINS)
         for chunk in chunks:
@@ -124,7 +127,8 @@ class GraphStore:
             if chunk.metadata.parent_symbol:
                 # Heuristic: look for symbol in the same file or across the whole source
                 self.conn.execute(
-                    "MATCH (c:Chunk {chunk_id: $id}), (parent:Chunk {symbol_name: $parent_name}) "
+                    "MATCH (c:Chunk {chunk_id: $id}), "
+                    "(parent:Chunk {symbol_name: $parent_name}) "
                     "WHERE parent.chunk_id STARTS WITH $prefix "
                     "MERGE (c)-[:INHERITS]->(parent)",
                     {
@@ -136,7 +140,8 @@ class GraphStore:
 
             for dep in chunk.metadata.dependencies:
                 self.conn.execute(
-                    "MATCH (c:Chunk {chunk_id: $id}), (target:Chunk {symbol_name: $dep_name}) "
+                    "MATCH (c:Chunk {chunk_id: $id}), "
+                    "(target:Chunk {symbol_name: $dep_name}) "
                     "WHERE target.chunk_id STARTS WITH $prefix "
                     "MERGE (c)-[:USES]->(target)",
                     {"id": chunk_id, "dep_name": dep, "prefix": source.identifier},
@@ -146,16 +151,17 @@ class GraphStore:
 
     def get_related_chunks(self, chunk_id: str, max_hops: int = 1) -> List[dict]:
         """
-        Finds chunks related to the given chunk_id via USES, INHERITS, or CONTAINS edges.
-        Returns a list of dicts with chunk_id, symbol_name, chunk_type, and depth.
+        Finds related chunks via USES, INHERITS, or CONTAINS edges.
+        Returns list of dicts with chunk_id, symbol_name, chunk_type.
         """
         results: List[dict] = []
         try:
             query = (
-                "MATCH (start:Chunk {chunk_id: $id})-[r:USES|INHERITS|CONTAINS*1.."
-                + str(max_hops)
-                + "]->(neighbor:Chunk) "
-                "RETURN DISTINCT neighbor.chunk_id, neighbor.symbol_name, neighbor.chunk_type"
+                "MATCH (start:Chunk {chunk_id: $id})-"
+                "[r:USES|INHERITS|CONTAINS*1.." + str(max_hops) + "]->"
+                "(neighbor:Chunk) "
+                "RETURN DISTINCT neighbor.chunk_id, neighbor.symbol_name, "
+                "neighbor.chunk_type"
             )
             res: Any = self.conn.execute(query, {"id": chunk_id})
             if isinstance(res, list):
@@ -184,7 +190,8 @@ class GraphStore:
                 "MATCH (d:Document)-[:CONTAINS]->(sibling:Chunk), "
                 "(d)-[:CONTAINS]->(target:Chunk {chunk_id: $id}) "
                 "WHERE sibling.chunk_id <> $id "
-                "RETURN DISTINCT sibling.chunk_id, sibling.symbol_name, sibling.chunk_type"
+                "RETURN DISTINCT sibling.chunk_id, sibling.symbol_name, "
+                "sibling.chunk_type"
             )
             res: Any = self.conn.execute(query, {"id": chunk_id})
             if isinstance(res, list):
@@ -210,7 +217,8 @@ class GraphStore:
         results: List[dict] = []
         try:
             query = (
-                "MATCH (s:Source {id: $id})-[:CONTAINS]->(d:Document)-[:CONTAINS]->(c:Chunk) "
+                "MATCH (s:Source {id: $id})-[:CONTAINS]->(d:Document)-"
+                "[:CONTAINS]->(c:Chunk) "
                 "RETURN d.path, c.chunk_id, c.symbol_name, c.chunk_type"
             )
             res: Any = self.conn.execute(query, {"id": source_id})
@@ -279,7 +287,7 @@ class GraphStore:
                                 p_name = row[col_names.index("name")]
                             if "type" in col_names:
                                 p_type = row[col_names.index("type")]
-                            # In some 0.11.x, the column name might be 'is_primary_key' or 'primary_key'
+                            # SDK 0.11.x column name might be 'is_primary_key'
                             pk_idx = next(
                                 (i for i, c in enumerate(col_names) if "primary" in c),
                                 -1,
@@ -287,7 +295,7 @@ class GraphStore:
                             if pk_idx != -1:
                                 is_pk = row[pk_idx] is True
                         else:
-                            # SDK Source confirms: row[1] is name, row[2] is type, row[4] is PK
+                            # row[1] is name, row[2] is type, row[4] is PK
                             if len(row) > 1:
                                 p_name = row[1]
                             if len(row) > 2:

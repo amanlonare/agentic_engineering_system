@@ -19,8 +19,8 @@ def _get_abs_path(path: str) -> str:
 @tool
 def analyze_prediction_accuracy(path: str = "data/movement_predictions.csv") -> str:
     """
-    Analyzes the accuracy of mobility predictions by comparing predicted vs actual modes.
-    Returns a per-region and per-mode breakdown of accuracy and confusion clusters.
+    Analyzes mobility prediction accuracy (predicted vs actual modes).
+    Returns per-region and per-mode accuracy and confusion clusters.
     """
     abs_path = _get_abs_path(path)
     logger.info(f"📊 Analyzing prediction accuracy in {abs_path}...")
@@ -63,9 +63,8 @@ def analyze_prediction_accuracy(path: str = "data/movement_predictions.csv") -> 
             for (reg, mode), data in stats.items():
                 if reg == r:
                     acc = (data["correct"] / data["total"]) * 100
-                    output.append(
-                        f"- {mode.capitalize()}: {acc:.1f}% ({data['correct']}/{data['total']})"
-                    )
+                    acc_text = f"{acc:.1f}% ({data['correct']}/{data['total']})"
+                    output.append(f"- {mode.capitalize()}: {acc_text}")
                     r_total += data["total"]
                     r_correct += data["correct"]
 
@@ -80,7 +79,8 @@ def analyze_prediction_accuracy(path: str = "data/movement_predictions.csv") -> 
             error_rate = (count / total_for_mode) * 100
             if error_rate > 10:
                 output.append(
-                    f"- {reg}: Predicted '{pred}' instead of '{actual}' in {error_rate:.1f}% of cases."
+                    f"- {reg}: Predicted '{pred}' instead of '{actual}' "
+                    f"in {error_rate:.1f}% of cases."
                 )
                 found_confusion = True
 

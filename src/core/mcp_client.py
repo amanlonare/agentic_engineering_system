@@ -28,7 +28,7 @@ class MCPClientManager:
         """Connect to a remote MCP server via SSE."""
         logger.info(f"Connecting to SSE MCP server '{name}' at {url}")
         try:
-            # We use an ExitStack logically, but for simplicity in this manager we'll start the context
+            # We use an ExitStack to manage context for stdio/sse clients
             from contextlib import AsyncExitStack
 
             stack = AsyncExitStack()
@@ -77,7 +77,7 @@ class MCPClientManager:
             logger.info(f"Injected Google credentials from {key_path}")
 
         logger.info(
-            f"Connecting to Stdio MCP server '{name}' with command: {command} {' '.join(args)}"
+            f"Connecting to Stdio MCP '{name}' with command: {command} {' '.join(args)}"
         )
         try:
             from contextlib import AsyncExitStack

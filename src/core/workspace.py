@@ -45,7 +45,8 @@ class WorkspaceManager:
     def identify_repository(self, task_description: str) -> Optional[str]:
         """
         Identifies the most relevant repository for a given task description.
-        Prioritizes explicit keywords and repository names before falling back to semantic search.
+        Prioritizes explicit keywords and repository names before falling "
+        "back to semantic search."
         """
         desc_lower = task_description.lower()
 

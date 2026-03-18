@@ -64,7 +64,7 @@ async def github_webhook(
 ):
     """
     Webhook receiver for GitHub events.
-    Synchronously processes Issue creation/labeling events and runs the Engineering Graph.
+    Synchronously processes Issue events and runs the Engineering Graph.
     """
     # 1. Read raw body for validation
     body = await request.body()
@@ -107,7 +107,10 @@ async def github_webhook(
     target_repo = workspace_manager.identify_repository(search_context)
 
     # 5. Build Initial State
-    thread_id = f"github_{repo_full_name.replace('/', '_')}_{issue_number}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:4]}"
+    thread_id = (
+        f"github_{repo_full_name.replace('/', '_')}_{issue_number}_"
+        f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:4]}"
+    )
     config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
 
     # The trigger explicitly names the issue context
@@ -171,7 +174,7 @@ async def github_webhook(
                 and final_state_data["validation_report"]
             ):
                 report = final_state_data["validation_report"]
-                # Validation Report is an object (or dict depending on Pydantic serialization context)
+                # Handle report as object or dict depending on context
                 # handle both safely
                 r_success = (
                     getattr(report, "success", report.get("success", False))
@@ -199,9 +202,15 @@ async def github_webhook(
                         # Clean up the message content
                         last_msg.content = content.replace(match.group(0), "").strip()
 
-            body_content += f"\nProcessed by internal system. Target scope was identified as `{target_repo}`."
+            body_content += (
+                f"\nProcessed by internal system. Target identified as `{target_repo}`."
+            )
 
-        comment_body = f"### {status_emoji} {status_title}\n\n{body_content}\n\n*Thread ID: `{thread_id}`*"
+        comment_body = (
+            f"### {status_emoji} {status_title}\n\n"
+            f"{body_content}\n\n"
+            f"*Thread ID: `{thread_id}`*"
+        )
 
         # Use MCP to post the comment
 

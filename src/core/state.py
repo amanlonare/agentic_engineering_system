@@ -52,15 +52,20 @@ class EngineeringState(BaseModel):
     )
     accumulated_growth_notes: str = Field(
         default="",
-        description="Persistent text of growth insights to be included in final PR description.",
+        description=(
+            "Persistent text of growth insights to be included in final PR description."
+        ),
     )
     follow_up_depth: int = Field(
         default=0,
-        description="Number of follow-up plans created from growth recommendations (max 2)",
+        description="Number of follow-up plans from growth (max 2)",
     )
     follow_up_context: Optional[str] = Field(
         default=None,
-        description="When set, Planning Agent uses this as task description instead of the original user message",
+        description=(
+            "Planning Agent uses this as task description instead of "
+            "original user message"
+        ),
     )
     verification_scripts: Annotated[List[str], operator.add] = Field(
         default_factory=list,
@@ -90,5 +95,8 @@ class EngineeringState(BaseModel):
 
     is_lightweight: bool = Field(
         default=False,
-        description="If True, the task is simple and agents should use simplified prompts (e.g., no mocking).",
+        description=(
+            "If True, the task is simple and agents should use simplified "
+            "prompts (e.g., no mocking)."
+        ),
     )

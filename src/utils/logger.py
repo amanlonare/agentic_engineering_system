@@ -29,7 +29,10 @@ class ColoredFormatter(logging.Formatter):
         color = self.COLORS.get(log_name, self.GREY)
 
         # Format: TIMESTAMP | LEVEL | NAME | MESSAGE
-        format_str = f"%(asctime)s | %(levelname)-8s | {color}%(name)-12s{self.RESET} | %(message)s"
+        format_str = (
+            f"%(asctime)s | %(levelname)-8s | "
+            f"{color}%(name)-12s{self.RESET} | %(message)s"
+        )
         formatter = logging.Formatter(format_str, datefmt="%Y-%m-%d %H:%M:%S")
         return formatter.format(record)
 

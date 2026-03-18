@@ -41,7 +41,7 @@ async def ops_node(state: EngineeringState) -> Dict[str, Any]:
 
         if not current_step:
             logger.warning(
-                "⚠️ No explicit Step ID found. Falling back to first uncompleted ops step."
+                "⚠️ No explicit Step ID. Falling back to first uncompleted step."
             )
             for step in state.task_plan.steps:
                 if step.assigned_to == "ops" and step.id not in (
@@ -90,8 +90,10 @@ async def ops_node(state: EngineeringState) -> Dict[str, Any]:
             or "commit" in current_step.description.lower()
             or "push" in current_step.description.lower()
         ):
-            instructions += f"\n\n🚀 ADDITIONAL GROWTH RECOMMENDATIONS TO INCLUDE IN COMMIT/PR:\n{state.accumulated_growth_notes}"
-
+            instructions += (
+                f"\n\n🚀 ADDITIONAL GROWTH RECOMMENDATIONS TO INCLUDE:\n"
+                f"{state.accumulated_growth_notes}"
+            )
     logger.info(f"🔒 Locking tools to repository: {repo}")
 
     # 2. Setup Persona and Tools
@@ -152,9 +154,9 @@ async def ops_node(state: EngineeringState) -> Dict[str, Any]:
                         ToolMessage(
                             tool_call_id=tool_call["id"],
                             content=(
-                                f"⚠️ DETERMINISTIC STOP: You already called {current_call} in this turn.\n"
+                                f"⚠️ DETERMINISTIC STOP: Already called {current_call}.\n"
                                 f"RESULT: {prev_result}\n"
-                                f"Do NOT repeat this call. Verification must proceed."
+                                f"Do NOT repeat this call."
                             ),
                         )
                     )
@@ -193,7 +195,7 @@ async def ops_node(state: EngineeringState) -> Dict[str, Any]:
                 messages
                 + [
                     HumanMessage(
-                        content="Finalize the TestReport based on your findings. Be honest about failures."
+                        content="Finalize the TestReport. Be honest about failures."
                     )
                 ]
             ),
@@ -220,14 +222,14 @@ async def ops_node(state: EngineeringState) -> Dict[str, Any]:
                     actual_command_failure = True
                     failure_details = content  # Capture the full STDERR + exit code
                     logger.warning(
-                        "🚨 Detected actual command failure in tool outputs. Overriding report.success to False."
+                        "🚨 Detected command failure. report.success -> False."
                     )
                     break
 
         if actual_command_failure:
             report.success = False
         elif not report.success:
-            # NEW: Override false negatives (LLM says failure but ALL commands succeeded)
+            # NEW: Override false negatives
             # This handles cases where LLM is confused by "Ran 0 tests" or other non-terminal output.
             commands_run = False
             all_successful = True
@@ -240,8 +242,7 @@ async def ops_node(state: EngineeringState) -> Dict[str, Any]:
 
             if commands_run and all_successful:
                 logger.warning(
-                    "✅ Overriding report.success to True: All commands exited with code 0 "
-                    "but LLM reported failure (likely confused by text output)."
+                    "✅ Overriding success to True: All commands exited with code 0."
                 )
                 report.success = True
 
@@ -267,7 +268,10 @@ async def ops_node(state: EngineeringState) -> Dict[str, Any]:
             if failure_details:
                 outcome = f"Verification Failed.\n\nCOMMAND OUTPUT:\n{failure_details}"
             else:
-                outcome = f"Verification {'Passed' if report.success else 'Failed'}. {report.logs or ''}"
+                outcome = (
+                    f"Verification {'Passed' if report.success else 'Failed'}. "
+                    f"{report.logs or ''}"
+                )
             history = [
                 StepExecutionRecord(
                     step_id=current_step.id,
@@ -289,7 +293,7 @@ async def ops_node(state: EngineeringState) -> Dict[str, Any]:
         if branch_name:
             # We use a state update for branch_name if the global state schema supports it,
             # or append it to the outcome history. Since EngineeringState currently has no
-            # explicit `branch_name` field, we will inject it into the final message instead.
+            # explicit `branch_name` field, we will inject it into the final message.
             last_msg_content = str(getattr(messages[-1], "content", ""))
             if isinstance(last_msg_content, str):
                 messages[-1].content = (

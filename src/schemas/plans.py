@@ -39,7 +39,10 @@ class ExecutionStep(BaseModel):
     )
     verification_criteria: Optional[str] = Field(
         default=None,
-        description="Specific testing/validation details for this step (e.g., 'Run pytest and verify output')",
+        description=(
+            "Specific testing/validation details for this step "
+            "(e.g., 'Run pytest and verify output')"
+        ),
     )
 
 

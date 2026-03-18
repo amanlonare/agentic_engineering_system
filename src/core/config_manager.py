@@ -91,7 +91,7 @@ class ConfigManager:
         self.config = AppConfig(**config_dict)
 
     def get_agent_llm(self, agent_name: str) -> BaseChatModel:
-        """Helper to get a configured LangChain ChatModel instance (OpenAI or Bedrock) for a specific agent."""
+        """Get a configured LangChain ChatModel (OpenAI or Bedrock) for an agent."""
         from src.core.config import settings
 
         app_cfg: AppConfig = self.config
@@ -122,13 +122,14 @@ class ConfigManager:
                 agent_cfg.region if agent_cfg and agent_cfg.region else llm_cfg.region
             )
             logger.info(
-                f"🤖 [Agent: {agent_name}] -> [Provider: bedrock] | [Model: {model}] | [Region: {region}]"
+                f"🤖 [Agent: {agent_name}] -> [Provider: bedrock] | "
+                f"[Model: {model}] | [Region: {region}]"
             )
             return ChatBedrockConverse(
                 model=model,
                 temperature=temp,
                 region_name=region,
-                # Bedrock handles retries via botocore, direct parameter not supported in this LangChain class
+                # Bedrock handles retries via botocore, parameter not supported here
             )
 
         # Default to OpenAI

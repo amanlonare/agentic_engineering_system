@@ -146,7 +146,7 @@ class ContextRetriever:
     def _fetch_chunk_content(
         self, chunk_id: str, graph_info: dict, graph_depth: int
     ) -> Optional[RetrievedContext]:
-        """Looks up a chunk's full content from ChromaDB given its graph-discovered ID."""
+        """Looks up chunk content from ChromaDB given its graph-discovered ID."""
         result = self.vector_store.get_chunk_by_id(chunk_id)
         if not result:
             return None

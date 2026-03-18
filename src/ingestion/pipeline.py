@@ -97,7 +97,8 @@ class IngestionPipeline:
         identified_source = self.identifier.identify(source_url)
         if not identified_source.is_verified:
             raise PermissionError(
-                f"Cannot verify access to source: {source_url}. Check tokens/credentials."
+                f"Cannot verify access to source: {source_url}. "
+                "Check tokens/credentials."
             )
 
         # Step 2: Fetch

@@ -20,13 +20,16 @@ logger = configure_logging("supervisor")
 
 
 def _build_follow_up_prompt(recommendations, depth: int = 1) -> str:
-    """Build a context prompt summarizing Growth findings for the follow-up Planning agent."""
+    """Build a context prompt summarizing Growth findings for Planning agent."""
     lines = [
         "GROWTH AGENT FINDINGS — Create an ACTION plan to fix these issues.",
-        f"IMPORTANT: Use step IDs with prefix 'FU{depth}-' (e.g., FU{depth}-STEP-1, FU{depth}-STEP-2) to avoid ID collisions.",
-        "This is a follow-up plan. The analysis is already done — do NOT assign steps to `growth`.",
+        f"IMPORTANT: Use step IDs with prefix 'FU{depth}-' "
+        f"(e.g., FU{depth}-STEP-1, FU{depth}-STEP-2) to avoid ID collisions.",
+        "This is a follow-up plan. The analysis is already done — "
+        "do NOT assign steps to `growth`.",
         "Assign steps to `coder` to fix code and `ops` to verify the fixes.",
-        "MANDATORY: Instructions and verification scripts MUST use absolute imports (e.g., `from src.model.predictor import ...`).",
+        "MANDATORY: Instructions and verification scripts MUST use absolute imports "
+        "(e.g., `from src.model.predictor import ...`).",
         "",
     ]
     for i, r in enumerate(recommendations, 1):
@@ -39,7 +42,7 @@ def _build_follow_up_prompt(recommendations, depth: int = 1) -> str:
             lines.append(f"   Target Repo: {r.suggested_repo}")
         if r.drift_detected:
             lines.append(
-                f"   ⚠️ Model drift detected (false positive rate: {r.false_positive_rate})"
+                f"   ⚠️ Model drift detected (FP rate: {r.false_positive_rate})"
             )
     return "\n".join(lines)
 
@@ -54,7 +57,8 @@ def _check_growth_follow_up(state: EngineeringState, logger):
     ]
     if actionable and state.follow_up_depth < app_config.workflow.max_follow_up_depth:
         logger.info(
-            "📈 %d actionable growth recommendation(s) found. Creating follow-up plan (depth %d).",
+            "📈 %d actionable growth recommendation(s) found. "
+            "Creating follow-up plan (depth %d).",
             len(actionable),
             state.follow_up_depth + 1,
         )
@@ -97,12 +101,11 @@ async def supervisor_node(state: EngineeringState) -> dict:
     The LangGraph node function that acts as the Supervisor.
     It inspects the state, queries the LLM, and returns the 'next_action'.
     """
-    logger.info(
-        f"👨‍💼 Supervisor evaluating state triggered by: {state.trigger.type if state.trigger else 'unknown'}"
-    )
+    msg_type = state.trigger.type if state.trigger else "unknown"
+    logger.info(f"👨‍💼 Supervisor evaluating state triggered by: {msg_type}")
 
     # 0. Lightweight Detection (Heuristic)
-    # If it's a new task (no messages yet or just the system/human trigger) and seems simple.
+    # If it's a new task (no messages yet or just the system/human trigger)
     human_messages = [m for m in state.messages if m.type == "human"]
     if human_messages and not state.task_plan:
         last_msg = human_messages[-1].content
@@ -128,14 +131,14 @@ async def supervisor_node(state: EngineeringState) -> dict:
 
     if state.error_message:
         logger.error(
-            f"🛑 Agent failure detected. Stopping execution. Reason: {state.error_message}"
+            f"🛑 Agent failure detected. Stopping. Reason: {state.error_message}"
         )
         return {"next_action": NodeName.FINISH}
 
     llm = config_manager.get_agent_llm("supervisor")
 
     if not llm:
-        # Mock logic to test routing: If no messages from agents yet, go to planning. Otherwise FINISH.
+        # Mock logic to test routing: If no messages from agents yet, go to planning.
         worker_messages = [m for m in state.messages if getattr(m, "type", "") == "ai"]
         next_action = NodeName.PLANNING if not worker_messages else NodeName.FINISH
         logger.info(f"👨‍💼 Supervisor decided next action (MOCK): {next_action}")
@@ -163,12 +166,13 @@ async def supervisor_node(state: EngineeringState) -> dict:
             MessagesPlaceholder(variable_name="messages"),
             (
                 "system",
-                "Based on the Plan vs the Completed Steps vs the Messages, who acts next?",
+                "Based on the Plan vs the Completed Steps vs the Messages, "
+                "who acts next?",
             ),
         ]
     )
 
-    # We use LLM structured output to guarantee it maps strictly to our RouteDecision schema
+    # Structured output guarantees mapping strictly to RouteDecision schema
     chain = prompt | llm.with_structured_output(RouteDecision)
 
     try:
@@ -186,13 +190,15 @@ async def supervisor_node(state: EngineeringState) -> dict:
                 record = history_map.get(step.id)
                 outcome = f" | Outcome: {record.outcome[:100]}" if record else ""
                 checklist_items.append(
-                    f"{status} {step.id}: {step.description} (Assigned to: {step.assigned_to}){outcome}"
+                    f"{status} {step.id}: {step.description} "
+                    f"(Assigned to: {step.assigned_to}){outcome}"
                 )
             plan_checklist = "\n".join(checklist_items)
 
         # 2. Deterministic Next Step Resolver
         # We first check if ANY recently attempted step failed and needs rework.
-        # This prevents "looping" if a step was mistakenly marked as complete but fails verification.
+        # This prevents "looping" if a step was mistakenly marked complete
+        # but fails verification.
         next_step = None
         if state.task_plan:
             # Check all steps in the plan that have execution history
@@ -220,11 +226,11 @@ async def supervisor_node(state: EngineeringState) -> dict:
                     )
                     if rework_count >= app_config.workflow.max_rework_attempts:
                         logger.error(
-                            "🛑 Step %s has failed %d times. Stopping to prevent infinite loop.",
+                            "🛑 Step %s has failed %d times. Stopping loop.",
                             step.id,
                             rework_count,
                         )
-                        # Check if Growth has actionable recommendations before giving up
+                        # Check if Growth has actionable recommendations...
                         follow_up = _check_growth_follow_up(state, logger)
                         if follow_up:
                             return follow_up
@@ -238,15 +244,17 @@ async def supervisor_node(state: EngineeringState) -> dict:
                         )
 
                     logger.info(
-                        "🔄 Rework detected! Verification for %s failed. Routing back to %s.",
+                        "🔄 Rework detected! Verification for %s failed. "
+                        "Routing back to %s.",
                         step.id,
                         next_node,
                     )
                     rework_msg = (
                         f"CHIEF ORCHESTRATOR: Verification failed for {step.id}.\n\n"
                         f"FAILURE DETAILS FROM OPS AGENT:\n{last_record.outcome}\n\n"
-                        f"{step.assigned_to.upper()}: Analyse the failure above carefully and fix the root cause. "
-                        f"Do NOT repeat what failed — change the approach based on the error."
+                        f"{step.assigned_to.upper()}: Analyse the failure above "
+                        "carefully and fix the root cause. "
+                        f"Do NOT repeat what failed — change the approach."
                     )
                     return {
                         "next_action": next_node,
@@ -272,7 +280,10 @@ async def supervisor_node(state: EngineeringState) -> dict:
 
             logger.info("🎯 Deterministic route: %s → %s", next_step.id, next_node)
             instruction_msg = AIMessage(
-                content=f"Chief Orchestrator: {next_step.assigned_to.upper()}, please execute {next_step.id}: {next_step.description}"
+                content=(
+                    f"Chief Orchestrator: {next_step.assigned_to.upper()}, "
+                    f"please execute {next_step.id}: {next_step.description}"
+                )
             )
             return {
                 "next_action": next_node,
@@ -290,7 +301,10 @@ async def supervisor_node(state: EngineeringState) -> dict:
             logger.info("🆕 No steps completed yet.")
 
         # If we reach here, either next_step is None (plan done) or task_plan is None
-        next_step_directive = "ALL STEPS COMPLETE → route to FINISH (unless validation failed and you choose to retry)"
+        next_step_directive = (
+            "ALL STEPS COMPLETE → route to FINISH "
+            "(unless validation failed and you choose to retry)"
+        )
         if not state.task_plan:
             next_step_directive = "NO PLAN EXISTS → route to PLANNING for construction."
 
