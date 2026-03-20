@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import Any, List, Optional, Union
 
 from .schemas import Chunk
 
@@ -8,7 +8,7 @@ class BaseEngine(ABC):
     """Abstract base class for all chunking engines (Python, MD, PDF, etc)."""
 
     @abstractmethod
-    def chunk(self, content: str, source_id: str, **kwargs) -> List[Chunk]:
+    def chunk(self, content: Union[str, dict, Any], source_id: str, **kwargs) -> List[Chunk]:
         """Process raw content into a list of structured Chunks."""
 
 
@@ -25,7 +25,11 @@ class SmartChunker:
         self.engines[name] = engine
 
     def chunk(
-        self, content: str, source_id: str, chunk_format: str, **kwargs
+        self,
+        content: Union[str, dict, Any],
+        source_id: str,
+        chunk_format: str,
+        **kwargs
     ) -> List[Chunk]:
         engine = self.engines.get(chunk_format)
         if not engine:

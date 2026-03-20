@@ -1,29 +1,38 @@
 import csv
 import os
 from collections import Counter
+from typing import Optional
 
 from langchain_core.tools import tool
 
+from src.core.resource_manager import ResourceManager
 from src.utils.logger import configure_logging
 
 logger = configure_logging("growth_tools")
+resource_manager = ResourceManager()
 
-
-def _get_abs_path(path: str) -> str:
-    """Ensures paths are relative to .context if not absolute."""
-    if not path.startswith(".context") and not os.path.isabs(path):
-        return os.path.join(".context", "testing_agentic_engineering_team", path)
+async def _get_abs_path(path: str, repo_name: Optional[str] = None) -> str:
+    """Resolves tool paths dynamically via ResourceManager."""
+    if repo_name:
+        # If repo is provided, resolve its base directory
+        try:
+            base_dir = await resource_manager.resolve_resource_path(repo_name)
+            return os.path.join(base_dir, path)
+        except Exception:
+            pass
+    
+    # Return path as-is if no repo provided or resolution fails
     return path
 
 
 @tool
-def analyze_prediction_accuracy(path: str = "data/movement_predictions.csv") -> str:
+async def analyze_prediction_accuracy(path: str = "data/movement_predictions.csv", repo_name: Optional[str] = None) -> str:
     """
     Analyzes mobility prediction accuracy (predicted vs actual modes).
     Returns per-region and per-mode accuracy and confusion clusters.
     """
-    abs_path = _get_abs_path(path)
-    logger.info(f"📊 Analyzing prediction accuracy in {abs_path}...")
+    abs_path = await _get_abs_path(path, repo_name)
+    logger.info("📊 Analyzing prediction accuracy in %s...", abs_path)
 
     if not os.path.exists(abs_path):
         return f"Error: Data file {abs_path} not found."
@@ -32,12 +41,12 @@ def analyze_prediction_accuracy(path: str = "data/movement_predictions.csv") -> 
     confusion = Counter()  # (region, predicted, actual) -> count
 
     try:
-        with open(abs_path, "r") as f:
+        with open(abs_path, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                region = row["region"]
-                pred = row["predicted_mode"]
-                actual = row["actual_mode"]
+                region = row.get("region", "unknown")
+                pred = row.get("predicted_mode", "unknown")
+                actual = row.get("actual_mode", "")
 
                 if not actual:  # Skip if no feedback
                     continue
@@ -55,6 +64,9 @@ def analyze_prediction_accuracy(path: str = "data/movement_predictions.csv") -> 
         # Format results
         output = ["### Prediction Accuracy Report\n"]
         regions = sorted(list(set(k[0] for k in stats.keys())))
+
+        if not regions:
+            return "No valid regions or feedback data found in CSV."
 
         for r in regions:
             output.append(f"#### Region: {r}")
@@ -94,13 +106,13 @@ def analyze_prediction_accuracy(path: str = "data/movement_predictions.csv") -> 
 
 
 @tool
-def detect_activity_trends(path: str = "data/movement_predictions.csv") -> str:
+async def detect_activity_trends(path: str = "data/movement_predictions.csv", repo_name: Optional[str] = None) -> str:
     """
     Detects declining user activity trends which might indicate churn.
     Returns a list of users with significant drops in movement volume.
     """
-    abs_path = _get_abs_path(path)
-    logger.info(f"📈 Detecting activity trends in {abs_path}...")
+    abs_path = await _get_abs_path(path, repo_name)
+    logger.info("📈 Detecting activity trends in %s...", abs_path)
 
     if not os.path.exists(abs_path):
         return f"Error: Data file {abs_path} not found."
@@ -109,10 +121,10 @@ def detect_activity_trends(path: str = "data/movement_predictions.csv") -> str:
 
     try:
         # Simple count for now to show activity levels
-        with open(abs_path, "r") as f:
+        with open(abs_path, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                uid = row["user_id"]
+                uid = row.get("user_id", "unknown")
                 user_activity[uid] = user_activity.get(uid, 0) + 1
 
         # Sort users by activity

@@ -160,8 +160,12 @@ class MCPClientManager:
     async def disconnect_all(self):
         """Close all active sessions."""
         for name, stack in self.exit_stacks.items():
-            logger.info(f"Disconnecting MCP server '{name}'")
-            await stack.aclose()
+            try:
+                logger.info(f"Disconnecting MCP server '{name}'")
+                await stack.aclose()
+            except Exception as e:
+                # Catch scope mismatch errors during task-switching
+                logger.warning(f"Note: Error during cleanup of {name} (may be expected in cross-task sessions): {e}")
         self.sessions = {}
         self.exit_stacks = {}
         self._tools_cache = {}

@@ -1,5 +1,5 @@
 import hashlib
-from typing import List
+from typing import Any, List
 
 from tree_sitter_languages import get_language, get_parser
 
@@ -20,7 +20,10 @@ class CodeEngine(BaseEngine):
         self.language = get_language(language_name)
         self.parser = get_parser(language_name)
 
-    def chunk(self, content: str, source_id: str, **_kwargs) -> List[Chunk]:
+    def chunk(self, content: str | dict | Any, source_id: str, **_kwargs) -> List[Chunk]:
+        if not isinstance(content, str):
+            content = str(content)
+
         tree = self.parser.parse(bytes(content, "utf8"))
         root_node = tree.root_node
 
@@ -54,7 +57,20 @@ class CodeEngine(BaseEngine):
                 (simple_identifier) @name
             ) @func
             """
-        elif self.language_name in ["javascript", "typescript", "tsx"]:
+        elif self.language_name == "javascript":
+            query_scm = """
+            (class_declaration
+                name: (identifier) @name
+            ) @class
+            (function_declaration
+                name: (identifier) @name
+            ) @func
+            (method_definition
+                name: (property_identifier) @name
+            ) @func
+            (arrow_function) @func
+            """
+        elif self.language_name in ["typescript", "tsx"]:
             query_scm = """
             (class_declaration
                 name: (type_identifier) @name

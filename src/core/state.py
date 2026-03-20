@@ -100,3 +100,17 @@ class EngineeringState(BaseModel):
             "prompts (e.g., no mocking)."
         ),
     )
+
+    # Deterministic Step Tracking
+    active_step_id: Optional[str] = Field(
+        default=None,
+        description="The ID of the step currently being executed by a worker node",
+    )
+    is_rework: bool = Field(
+        default=False,
+        description="Flag set by Supervisor when a step needs correction after failure.",
+    )
+    rework_count: int = Field(
+        default=0,
+        description="Number of times the current active_step_id has been attempted.",
+    )

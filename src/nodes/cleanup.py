@@ -1,0 +1,40 @@
+import os
+from pathlib import Path
+from typing import Any, Dict
+
+from src.core.config_manager import app_config
+from src.core.state import EngineeringState
+from src.utils.logger import configure_logging
+
+logger = configure_logging("cleanup")
+
+async def cleanup_node(state: EngineeringState) -> Dict[str, Any]:
+    """
+    Cleanup Node: Removes transient artifacts like task plans and temporary clones.
+    """
+    logger.info("🧹 Cleanup Agent tidying up...")
+    
+    # 1. Cleanup Task Plan
+    thread_id = state.trigger.payload.get("thread_id", "unknown") if state.trigger and hasattr(state.trigger, 'payload') else "manual-task"
+    storage_base = Path(app_config.system.plan_storage_base)
+    plan_filename = f"task_{thread_id}.md"
+    plan_path = storage_base / plan_filename
+    
+    if plan_path.exists():
+        try:
+            plan_path.unlink()
+            logger.info(f"🗑️ Deleted transient plan: {plan_path}")
+        except Exception as e:
+            logger.warning(f"Failed to delete plan {plan_path}: {e}")
+    else:
+        logger.debug(f"No transient plan found at {plan_path}")
+
+    # 2. Cleanup Temporary Clones (via ResourceManager)
+    from src.tools.codebase_tools import resource_manager
+    try:
+        await resource_manager.cleanup()
+        logger.info("🧼 Cleaned up ephemeral workspaces.")
+    except Exception as e:
+        logger.warning(f"Failed to cleanup workspaces: {e}")
+
+    return {}

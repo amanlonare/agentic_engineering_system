@@ -7,20 +7,21 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+from langchain_core.runnables.config import RunnableConfig
 
-from src.core.config import settings
 from src.core.config_manager import app_config, config_manager
-from src.core.mcp_client import MCPClientManager
 from src.core.state import EngineeringState
 from src.schemas import StepExecutionRecord, StepStatus, TestReport
 from src.tools.codebase_tools import get_ops_tools
 from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.utils.logger import configure_logging
+from src.core.resource_manager import ResourceManager
 
 logger = configure_logging("ops")
+resource_manager = ResourceManager()
 
 
-async def ops_node(state: EngineeringState) -> Dict[str, Any]:
+async def ops_node(state: EngineeringState, config: RunnableConfig) -> Dict[str, Any]:
     """
     Ops Agent: Verifies code changes and deployment.
     """
@@ -103,19 +104,10 @@ async def ops_node(state: EngineeringState) -> Dict[str, Any]:
 
     llm = config_manager.get_agent_llm("ops")
 
-    # --- MCP Integration ---
-    mcp_manager = MCPClientManager()
-    try:
-        if settings.GITHUB_TOKEN:
-            cmd_parts = settings.GITHUB_MCP_COMMAND.split()
-            await mcp_manager.connect_stdio("github", cmd_parts[0], cmd_parts[1:])
-            remote_tools = await mcp_manager.get_langchain_tools("github")
-            tools.extend(remote_tools)
-            logger.info(
-                f"🔗 Injected {len(remote_tools)} GitHub tools via Stdio to Ops."
-            )
-    except Exception as e:
-        logger.error(f"⚠️ Failed to load local GitHub tools for Ops: {e}")
+    # --- Integrated Remote Tools ---
+    from src.tools.github import list_github_issues, create_github_issue, create_pull_request
+    
+    tools.extend([list_github_issues, create_github_issue, create_pull_request])
 
     llm_with_tools = llm.bind_tools(tools)
 
@@ -135,7 +127,7 @@ async def ops_node(state: EngineeringState) -> Dict[str, Any]:
         MAX_TOOL_CALLS = agent_cfg.max_tool_calls if agent_cfg else 10
 
         while tool_call_count < MAX_TOOL_CALLS:
-            response = await llm_with_tools.ainvoke(messages)
+            response = await llm_with_tools.ainvoke(messages, config=config)
             messages.append(response)
 
             if not response.tool_calls:
@@ -166,7 +158,12 @@ async def ops_node(state: EngineeringState) -> Dict[str, Any]:
                     (t for t in tools if t.name == tool_call["name"]), None
                 )
                 if tool_instance:
-                    result = tool_instance.invoke(tool_call["args"])
+                    # Handle both sync and async tools
+                    if hasattr(tool_instance, "ainvoke"):
+                        result = await tool_instance.ainvoke(tool_call["args"])
+                    else:
+                        result = tool_instance.invoke(tool_call["args"])
+                    
                     messages.append(
                         ToolMessage(tool_call_id=tool_call["id"], content=str(result))
                     )
@@ -197,7 +194,8 @@ async def ops_node(state: EngineeringState) -> Dict[str, Any]:
                     HumanMessage(
                         content="Finalize the TestReport. Be honest about failures."
                     )
-                ]
+                ],
+                config=config,
             ),
         )
 
@@ -311,4 +309,4 @@ async def ops_node(state: EngineeringState) -> Dict[str, Any]:
             "execution_history": [],
         }
     finally:
-        await mcp_manager.disconnect_all()
+        await resource_manager.cleanup()

@@ -29,27 +29,36 @@ def build_graph(checkpointer=None):
     builder.add_node(NodeName.CODER, coder_node)
     builder.add_node(NodeName.OPS, ops_node)
     builder.add_node(NodeName.GROWTH, growth_node)
+    from src.nodes.cleanup import cleanup_node
+    builder.add_node(NodeName.CLEANUP, cleanup_node)
 
     # 2. Add edges
     # The workflow always starts at the supervisor
     builder.add_edge(START, NodeName.SUPERVISOR)
 
-    # The supervisor uses conditional edges to route to workers based on 'next_action'
+    # 🧪 TEST MODE: All paths from Supervisor lead to CLEANUP -> END to test routing only.
+    # To restore normal flow, change CLEANUP back to NodeName.PLANNING, CODER, etc.
     builder.add_conditional_edges(
         NodeName.SUPERVISOR,
         lambda state: state.next_action,
         {
             NodeName.PLANNING: NodeName.PLANNING,
             NodeName.CODER: NodeName.CODER,
-            NodeName.OPS: NodeName.OPS,
-            NodeName.GROWTH: NodeName.GROWTH,
-            NodeName.FINISH: END,
+            NodeName.OPS: NodeName.CLEANUP,
+            NodeName.GROWTH: NodeName.CLEANUP,
+            NodeName.FINISH: NodeName.CLEANUP,
         },
     )
 
     # All workers route back to the Supervisor when they are done
-    for worker in [NodeName.PLANNING, NodeName.CODER, NodeName.OPS, NodeName.GROWTH]:
+    # EXCEPT Coder which we are isolating for evaluation
+    builder.add_edge(NodeName.PLANNING, NodeName.SUPERVISOR)
+    builder.add_edge(NodeName.CODER, NodeName.CLEANUP)  # 🧪 TEST: Stop after Coder (cleanup first)
+    for worker in [NodeName.OPS, NodeName.GROWTH]:
         builder.add_edge(worker, NodeName.SUPERVISOR)
+
+    # Mandatory cleanup before finishing
+    builder.add_edge(NodeName.CLEANUP, END)
 
     # 3. Compile the graph
     return builder.compile(checkpointer=checkpointer)
@@ -68,6 +77,6 @@ if __name__ == "__main__":
             f.write(png_data)
 
         print(f"✅ Graph visualization saved to: {output_path}")
-    except Exception as e:
+    except (ImportError, RuntimeError, IOError) as e:
         print(f"❌ Error generating visualization: {e}")
         print("Note: Ensure 'pygraphviz', 'graphviz', and 'pillow' are installed.")

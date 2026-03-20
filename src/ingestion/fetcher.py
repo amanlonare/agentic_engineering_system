@@ -108,6 +108,9 @@ class SourceFetcher:
             raise ValueError(f"Invalid GitHub URL: {url}")
 
         owner, repo = path_parts[0], path_parts[1]
+        # Strip .git extension if present for the MCP tool call
+        if repo.lower().endswith(".git"):
+            repo = repo[:-4]
 
         # Ensure GitHub MCP is connected
         if "github" not in self.mcp_manager.sessions:

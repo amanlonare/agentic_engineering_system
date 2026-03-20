@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Any, List
+from typing import Any, List, Optional
 
 import kuzu
 
@@ -57,13 +57,27 @@ class GraphStore:
                 "CREATE NODE TABLE Chunk(chunk_id STRING, symbol_name STRING, "
                 "chunk_type STRING, PRIMARY KEY(chunk_id))"
             )
+        if "Repository" not in tables:
+            self.conn.execute(
+                "CREATE NODE TABLE Repository(name STRING, remote_url STRING, "
+                "mcp_uri STRING, type STRING, PRIMARY KEY(name))"
+            )
+        else:
+            # Check if mcp_uri exists, if not add it (Basic schema migration)
+            try:
+                self.conn.execute("ALTER TABLE Repository ADD mcp_uri STRING")
+                logger.info("Added mcp_uri property to Repository table.")
+            except Exception as e:
+                # Already exists or other error
+                logger.debug("mcp_uri column already exists or migration failed: %s", e)
+                pass
 
         # Rel Tables
         if "CONTAINS" not in tables:
             # First hops
             self.conn.execute(
-                "CREATE REL TABLE CONTAINS(FROM Source TO Document, "
-                "FROM Document TO Chunk, FROM Chunk TO Chunk)"
+                "CREATE REL TABLE CONTAINS(FROM Repository TO Source, "
+                "FROM Source TO Document, FROM Document TO Chunk, FROM Chunk TO Chunk)"
             )
         if "INHERITS" not in tables:
             self.conn.execute("CREATE REL TABLE INHERITS(FROM Chunk TO Chunk)")
@@ -75,6 +89,20 @@ class GraphStore:
         query = "MERGE (s:Source {id: $id}) SET s.type = $type"
         self.conn.execute(
             query, {"id": source.identifier, "type": source.source_type.value}
+        )
+
+    def upsert_repository(self, repo_name: str, source_id: str, repo_type: str = "Unknown"):
+        """Idempotently adds a Repository node and links it to a Source."""
+        # Create Repository node
+        self.conn.execute(
+            "MERGE (r:Repository {name: $name}) SET r.remote_url = $url, r.type = $type",
+            {"name": repo_name, "url": source_id, "type": repo_type}
+        )
+        # Link Repository to Source
+        self.conn.execute(
+            "MATCH (s:Source {id: $src_id}), (r:Repository {name: $name}) "
+            "MERGE (r)-[:CONTAINS]->(s)",
+            {"src_id": source_id, "name": repo_name}
         )
 
     def upsert_chunks(self, source: IdentifiedSource, chunks: List[Chunk]):
@@ -146,6 +174,17 @@ class GraphStore:
                     "MERGE (c)-[:USES]->(target)",
                     {"id": chunk_id, "dep_name": dep, "prefix": source.identifier},
                 )
+
+    def execute_query(self, query: str, params: Optional[dict] = None) -> List[Any]:
+        """Executes a Cypher query and returns the results as a list of rows."""
+        res: Any = self.conn.execute(query, params or {})
+        if isinstance(res, list):
+            res = res[0]
+        
+        results = []
+        while res.has_next():
+            results.append(res.get_next())
+        return results
 
     # ── Query / Traversal Methods ──────────────────────────────────────
 
@@ -237,6 +276,39 @@ class GraphStore:
                     )
         except Exception as e:
             logger.warning("Source tree query failed for %s: %s", source_id, e)
+        return results
+
+    def get_repo_structure(self, repo_name: str) -> List[dict]:
+        """
+        Returns all Documents and Chunks under a given Repository.
+        Groups chunks by document path.
+        """
+        results: List[dict] = []
+        try:
+            query = (
+                "MATCH (r:Repository {name: $name})-[:CONTAINS]->(s:Source)-"
+                "[:CONTAINS]->(d:Document)-[:CONTAINS]->(c:Chunk) "
+                "RETURN d.path, c.symbol_name, c.chunk_type"
+            )
+            res: Any = self.conn.execute(query, {"name": repo_name})
+            if isinstance(res, list):
+                res = res[0]
+            
+            # Map of doc_path -> list of symbols
+            doc_map = {}
+            while res.has_next():
+                row = res.get_next()
+                if isinstance(row, list) and len(row) >= 3:
+                    doc_path, symbol_name, chunk_type = row[0], row[1], row[2]
+                    if doc_path not in doc_map:
+                        doc_map[doc_path] = []
+                    doc_map[doc_path].append({"name": symbol_name, "type": chunk_type})
+            
+            for path, symbols in doc_map.items():
+                results.append({"document_path": path, "symbols": symbols})
+                
+        except Exception as e:
+            logger.warning("Repo structure query failed for %s: %s", repo_name, e)
         return results
 
     def get_schema(self) -> str:

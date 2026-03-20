@@ -9,11 +9,14 @@ from langchain_core.prompts import (
     MessagesPlaceholder,
     SystemMessagePromptTemplate,
 )
+from langchain_core.runnables import RunnableConfig
 
 from src.core.config_manager import app_config, config_manager
 from src.core.state import EngineeringState
+from src.core.workspace import WorkspaceManager
 from src.prompts.supervisor import SUPERVISOR_SYSTEM_PROMPT
 from src.schemas import GrowthRecommendationType, NodeName, RouteDecision, StepStatus
+from src.tools.codebase_tools import search_codebase
 from src.utils.logger import configure_logging
 
 logger = configure_logging("supervisor")
@@ -96,7 +99,7 @@ def _check_growth_follow_up(state: EngineeringState, logger):
     return None
 
 
-async def supervisor_node(state: EngineeringState) -> dict:
+async def supervisor_node(state: EngineeringState, config: RunnableConfig) -> dict:
     """
     The LangGraph node function that acts as the Supervisor.
     It inspects the state, queries the LLM, and returns the 'next_action'.
@@ -143,6 +146,10 @@ async def supervisor_node(state: EngineeringState) -> dict:
         next_action = NodeName.PLANNING if not worker_messages else NodeName.FINISH
         logger.info(f"👨‍💼 Supervisor decided next action (MOCK): {next_action}")
         return {"next_action": next_action}
+
+    # Retrieve real-time org summary from Graph DB
+    workspace_manager = WorkspaceManager()
+    org_summary = workspace_manager.get_org_summary()
 
     system_prompt = SystemMessagePromptTemplate.from_template(SUPERVISOR_SYSTEM_PROMPT)
     # We pass the full state context to help the supervisor route correctly
@@ -234,7 +241,11 @@ async def supervisor_node(state: EngineeringState) -> dict:
                         follow_up = _check_growth_follow_up(state, logger)
                         if follow_up:
                             return follow_up
-                        return {"next_action": NodeName.FINISH}
+                        return {
+                            "next_action": NodeName.FINISH,
+                            "is_rework_failure": True,
+                            "rework_failure_reason": "Max rework attempts reached",
+                        }
 
                     if step.assigned_to.lower() == "ops":
                         next_node = NodeName.CODER
@@ -258,6 +269,9 @@ async def supervisor_node(state: EngineeringState) -> dict:
                     )
                     return {
                         "next_action": next_node,
+                        "is_rework": True,
+                        "active_step_id": step.id,
+                        "rework_count": rework_count,
                         "messages": [AIMessage(content=rework_msg)],
                     }
 
@@ -287,6 +301,9 @@ async def supervisor_node(state: EngineeringState) -> dict:
             )
             return {
                 "next_action": next_node,
+                "active_step_id": next_step.id,
+                "is_rework": False,
+                "rework_count": 0,
                 "messages": [instruction_msg],
             }
 
@@ -311,6 +328,7 @@ async def supervisor_node(state: EngineeringState) -> dict:
         # Explicitly invoke the chain
         result = await chain.ainvoke(
             {
+                "org_summary": org_summary,
                 "trigger_type": state.trigger.type if state.trigger else "unknown",
                 "task_plan": plan_checklist if state.task_plan else "None",
                 "next_step_directive": next_step_directive,
@@ -326,12 +344,25 @@ async def supervisor_node(state: EngineeringState) -> dict:
                 ),
                 "repo_name": state.trigger.repo_name if state.trigger else "General",
                 "messages": state.messages,
-            }
+            },
+            config=config,
         )
 
+        state_update = {}
+        
         if isinstance(result, RouteDecision):
             reasoning = result.reasoning
             next_node = NodeName(result.next_node)
+            
+            if result.rejection_message:
+                logger.warning("🚫 Supervisor rejected query: %s", result.rejection_message)
+                state_update["messages"] = [AIMessage(content=result.rejection_message)]
+            
+            if result.target_repo and state.trigger:
+                logger.info("🎯 Supervisor identified target repo: %s", result.target_repo)
+                state.trigger.repo_name = result.target_repo
+                state_update["trigger"] = state.trigger
+                
         else:
             next_node = NodeName.FINISH
             reasoning = "Invalid model output, falling back to FINISH."
@@ -343,9 +374,11 @@ async def supervisor_node(state: EngineeringState) -> dict:
         if next_node == NodeName.FINISH:
             follow_up = _check_growth_follow_up(state, logger)
             if follow_up:
-                return follow_up
+                state_update.update(follow_up)
+                return state_update
 
-        return {"next_action": next_node}
+        state_update["next_action"] = next_node
+        return state_update
 
     except Exception as e:
         logger.error(f"Failed to route using LLM: {e}")

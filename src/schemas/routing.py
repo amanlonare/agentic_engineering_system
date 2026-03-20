@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -14,4 +16,12 @@ class RouteDecision(BaseModel):
     )
     reasoning: str = Field(
         description="A concise explanation of why this routing decision was made."
+    )
+    target_repo: Optional[str] = Field(
+        default=None,
+        description="The identified target repository name, e.g., 'amanlonare/testing_agentic_engineering_team'",
+    )
+    rejection_message: Optional[str] = Field(
+        default=None,
+        description="The message to display to the user if rejecting a non-organizational query.",
     )

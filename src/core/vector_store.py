@@ -57,14 +57,18 @@ class VectorStore:
 
             # Prepare metadata (flattening complex types)
             meta = {
-                "source_id": chunk.metadata.source_id,
-                "chunk_index": chunk.metadata.chunk_index,
-                "chunk_type": chunk.chunk_type.value,
-                "language": chunk.metadata.language or "unknown",
-                "symbol_name": chunk.metadata.symbol_name or "unknown",
-                "signature": chunk.metadata.signature or "",
-                "parent_symbol": chunk.metadata.parent_symbol or "",
+                "source_id": str(chunk.metadata.source_id),
+                "chunk_index": str(chunk.metadata.chunk_index),
+                "chunk_type": str(chunk.chunk_type.value),
+                "language": str(chunk.metadata.language or "unknown"),
+                "symbol_name": str(chunk.metadata.symbol_name or "unknown"),
+                "signature": str(chunk.metadata.signature or ""),
+                "parent_symbol": str(chunk.metadata.parent_symbol or ""),
             }
+            # Flatten custom_attributes into the main metadata dict for searchability
+            for k, v in chunk.metadata.custom_attributes.items():
+                if k not in meta:
+                    meta[k] = str(v)
 
             ids.append(chunk_id)
             documents.append(chunk.content)

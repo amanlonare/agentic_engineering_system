@@ -59,4 +59,7 @@ class TechnicalPlan(BaseModel):
     estimated_risk: str = Field(
         default="low", description="Risk assessment (low, medium, high)"
     )
+    priority: str = Field(
+        default="medium", description="Task priority (low, medium, high, urgent)"
+    )
     prd_link: Optional[str] = Field(default=None, description="Link to associated PRD")

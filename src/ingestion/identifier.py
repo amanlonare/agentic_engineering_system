@@ -92,6 +92,10 @@ class SourceIdentifier:
             return False
 
         owner, repo = path_parts[0], path_parts[1]
+        # Strip .git extension if present for the API call
+        if repo.lower().endswith(".git"):
+            repo = repo[:-4]
+
         api_url = f"https://api.github.com/repos/{owner}/{repo}"
         headers = {"Authorization": f"token {self.github_token}"}
 

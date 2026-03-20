@@ -8,36 +8,61 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+from langchain_core.runnables import RunnableConfig
 
-from src.core.config import settings
 from src.core.config_manager import app_config, config_manager
-from src.core.mcp_client import MCPClientManager
 from src.core.state import EngineeringState
 from src.schemas import StepExecutionRecord, StepStatus
 from src.tools.codebase_tools import get_restricted_tools
 from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.utils.logger import configure_logging
 
+from src.core.resource_manager import ResourceManager
+
 logger = configure_logging("coder")
 
+# Global resource manager
+resource_manager = ResourceManager()
 
-def _get_repo_tree(repo_name: str, max_depth: int = 3) -> str:
-    """Recursively list the repo directory tree to pre-load for the LLM."""
-    base_path = os.path.join(".context", repo_name)
-    if not os.path.isdir(base_path):
-        return f"Repository directory '.context/{repo_name}' not found."
+async def _get_remote_repo_summary(repo_uri: str) -> str:
+    """Provides a summarized view of a remote repository's structure."""
+    try:
+        items = await resource_manager.list_resource(repo_uri)
+        return "\n".join([f"- {i}" for i in items])
+    except Exception as e:
+        return f"Error listing remote resource: {e}"
 
-    lines = [f".context/{repo_name}/"]
-    _walk_tree(base_path, "", lines, current_depth=0, max_depth=max_depth)
-    return (
-        "\n".join(lines)
-        if len(lines) > 1
-        else f".context/{repo_name}/ (empty repository)"
+async def _get_repo_tree(repo_name: str, max_depth: int = 3) -> str:
+    """Get repo tree via ephemeral clone or remote listing."""
+    from src.core.graph_store import GraphStore
+    graph_store = GraphStore()
+    
+    # Try to find the MCP URI from the graph store
+    results = graph_store.execute_query(
+        "MATCH (r:Repository {name: $name}) RETURN r.mcp_uri",
+        {"name": repo_name}
     )
-
+    
+    if results and results[0][0]:
+        mcp_uri = results[0][0]
+        # Try remote listing first
+        try:
+            return await _get_remote_repo_summary(mcp_uri)
+        except Exception:
+            pass
+        # Fall back to ephemeral clone
+        try:
+            local_path = await resource_manager.ensure_local_context(mcp_uri)
+            lines = [f"{repo_name}/"]
+            _walk_tree(local_path, "", lines, current_depth=0, max_depth=max_depth)
+            return "\n".join(lines) if len(lines) > 1 else f"{repo_name}/ (empty repository)"
+        except Exception as e:
+            return f"Could not load repo tree for {repo_name}: {e}"
+    
+    return f"Repository '{repo_name}' not found in knowledge graph."
 
 def _walk_tree(path: str, prefix: str, lines: list, current_depth: int, max_depth: int):
-    """Helper to build an indented tree string."""
+    """Helper to build an indented tree string for local paths."""
     if current_depth >= max_depth:
         return
     try:
@@ -60,7 +85,7 @@ def _walk_tree(path: str, prefix: str, lines: list, current_depth: int, max_dept
         pass
 
 
-async def coder_node(state: EngineeringState) -> Dict[str, Any]:
+async def coder_node(state: EngineeringState, config: RunnableConfig) -> Dict[str, Any]:
     """
     Coder Agent: Executes code changes using restricted tools.
     """
@@ -76,39 +101,44 @@ async def coder_node(state: EngineeringState) -> Dict[str, Any]:
     rework_context = ""
 
     # Check if this is a REWORK triggered by Ops failure
-    is_rework = (
-        "Verification failed" in instructions
-        or "CHIEF ORCHESTRATOR: Verification failed" in instructions
-    )
+    is_rework = state.is_rework
 
+    # 1. Identify Target Step and Repo via active_step_id
     failed_ops_step_id = None
-    if state.task_plan:
-        # Check if instructions contain a specific step ID
+    if state.task_plan and state.active_step_id:
         for step in state.task_plan.steps:
-            if step.id in instructions:
-                # If it's a coder step, this is our target
-                if step.assigned_to == "coder":
-                    current_step = step
-                    break
-                # If it's an OPs step, find its coder dependency
-                elif step.assigned_to == "ops":
+            if step.id == state.active_step_id:
+                current_step = step
+                break
+    
+    # Fallback/Rework logic
+    if not current_step and state.task_plan:
+        # If it's a rework but we don't have an active_step_id, find the failed step
+        if is_rework:
+            for step in state.task_plan.steps:
+                last_record = next(
+                    (rec for rec in reversed(state.execution_history or []) if rec.step_id == step.id),
+                    None
+                )
+                if last_record and last_record.status == StepStatus.FAILED:
                     failed_ops_step_id = step.id
-                    rework_context = f"REWORK TRIGGERED BY {step.id} FAILURE: "
-                    # Find a relevant coder step (e.g. the first one it depends on)
-                    relevant_ids = [d for d in step.dependencies]
-                    for s in state.task_plan.steps:
-                        if s.id in relevant_ids and s.assigned_to == "coder":
-                            current_step = s
-                            break
+                    # If failed step is coder, use it. If ops, use its first coder dependency.
+                    if step.assigned_to == "coder":
+                        current_step = step
+                    elif step.assigned_to == "ops":
+                        relevant_ids = [d for d in step.dependencies]
+                        for s in state.task_plan.steps:
+                            if s.id in relevant_ids and s.assigned_to == "coder":
+                                current_step = s
+                                break
                     if current_step:
+                        rework_context = f"REWORK TRIGGERED BY {step.id} FAILURE: "
                         break
 
-        # Fallback 1: First uncompleted coder step
+        # Final fallback: First uncompleted coder step
         if not current_step:
             for step in state.task_plan.steps:
-                if step.assigned_to == "coder" and step.id not in (
-                    state.completed_step_ids or []
-                ):
+                if step.assigned_to == "coder" and step.id not in (state.completed_step_ids or []):
                     current_step = step
                     break
 
@@ -175,8 +205,11 @@ async def coder_node(state: EngineeringState) -> Dict[str, Any]:
                 )
             ]
 
-    # PRE-LOAD REPO TREE so the LLM never needs to call list_directory
-    repo_tree = _get_repo_tree(repo)
+    # PRE-LOAD REPO TREE
+    if repo.startswith(app_config.system.protocol_prefix):
+        repo_tree = await _get_remote_repo_summary(repo)
+    else:
+        repo_tree = await _get_repo_tree(repo)
     logger.info("📂 Pre-loaded repo tree for '%s'", repo)
 
     # PRESERVE instructions and provide clear context
@@ -203,19 +236,14 @@ async def coder_node(state: EngineeringState) -> Dict[str, Any]:
 
     tools = get_restricted_tools(repo)
 
-    # --- MCP Integration ---
-    mcp_manager = MCPClientManager()
-    try:
-        if settings.GITHUB_TOKEN:
-            cmd_parts = settings.GITHUB_MCP_COMMAND.split()
-            await mcp_manager.connect_stdio("github", cmd_parts[0], cmd_parts[1:])
-            remote_tools = await mcp_manager.get_langchain_tools("github")
-            tools.extend(remote_tools)
-            logger.info(
-                f"🔗 Injected {len(remote_tools)} GitHub tools via Stdio to Coder."
-            )
-    except Exception as e:
-        logger.error(f"⚠️ Failed to load local GitHub tools for Coder: {e}")
+    # --- Integrated Remote Tools ---
+    from src.tools.github import list_github_issues, create_github_issue, create_pull_request
+    from src.tools.gdrive import search_gdrive, list_gdrive_folder
+    
+    tools.extend([
+        list_github_issues, create_github_issue, create_pull_request,
+        search_gdrive, list_gdrive_folder
+    ])
 
     llm = config_manager.get_agent_llm("coder")
     llm_with_tools = llm.bind_tools(tools)
@@ -236,11 +264,11 @@ async def coder_node(state: EngineeringState) -> Dict[str, Any]:
         consecutive_dup_rounds = 0  # Force-break after N all-duplicate rounds
         # Configurable limits
         agent_cfg = app_config.agents.get("coder")
-        MAX_TOOL_CALLS = agent_cfg.max_tool_calls if agent_cfg else 20
+        MAX_TOOL_CALLS = agent_cfg.max_tool_calls if agent_cfg else app_config.workflow.default_max_tool_calls
         MAX_DUP_ROUNDS = agent_cfg.max_duplicate_rounds if agent_cfg else 3
 
         while tool_call_count < MAX_TOOL_CALLS:
-            response = await llm_with_tools.ainvoke(messages)
+            response = await llm_with_tools.ainvoke(messages, config=config)
             messages.append(response)
 
             if not response.tool_calls:
@@ -285,14 +313,22 @@ async def coder_node(state: EngineeringState) -> Dict[str, Any]:
                     else:
                         result = tool_instance.invoke(tool_call["args"])
 
+                    result_str = str(result)
                     messages.append(
                         ToolMessage(
                             tool_call_id=tool_call["id"] or "",
-                            content=str(result),
+                            content=result_str,
                         )
                     )
+                    
+                    # Log a snippet of the result for visibility
+                    snippet = result_str[:500].replace('\n', ' ')
+                    if len(result_str) > 500:
+                        snippet += "..."
+                    logger.info("🛠️ Tool '%s' returned: %s", tool_call["name"], snippet)
+
                     # Cache result for loop prevention
-                    turn_tool_history[current_call] = result
+                    turn_tool_history[current_call] = result_str
                 else:
                     error_msg = f"Error: Tool {tool_call['name']} not available."
                     logger.warning(error_msg)
@@ -352,9 +388,10 @@ async def coder_node(state: EngineeringState) -> Dict[str, Any]:
                 for tc in msg.tool_calls:
                     if tc["name"] == "write_file":
                         path = tc["args"].get("path", "")
-                        if "/tests/" in path and path.endswith(".py"):
-                            # Clean the path to be relative to .context/{repo}/ for Ops
-                            clean_path = path.replace(f".context/{repo}/", "")
+                        if "/tests/" in path and (path.endswith(".py") or path.endswith(".js")):
+                            # Extract the test-relative path regardless of prefix
+                            test_idx = path.index("/tests/")
+                            clean_path = path[test_idx + 1:]  # e.g., "tests/test_feature.py"
                             if clean_path not in script_matches:
                                 script_matches.append(clean_path)
 
@@ -366,8 +403,8 @@ async def coder_node(state: EngineeringState) -> Dict[str, Any]:
             "verification_scripts": script_matches,
         }
 
-    except Exception:
-        logger.exception("Coder Agent failed unexpectedly")
+    except Exception as e:
+        logger.exception(f"Coder Agent failed unexpectedly: {e}")
         return {
             "messages": [
                 AIMessage(content="Coder Agent failed due to an internal error.")
@@ -375,6 +412,3 @@ async def coder_node(state: EngineeringState) -> Dict[str, Any]:
             "completed_step_ids": [],
             "execution_history": [],
         }
-
-    finally:
-        await mcp_manager.disconnect_all()
