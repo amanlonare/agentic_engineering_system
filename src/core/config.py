@@ -56,7 +56,7 @@ class Settings(BaseSettings):
             "gdrive": "gdrive",
             "google": "gdrive",
         },
-        repr=True
+        repr=True,
     )
 
     # Langfuse Settings

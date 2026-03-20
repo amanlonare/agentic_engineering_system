@@ -16,15 +16,17 @@ Example 2: User says "What is the weather today?"
   → Return FINISH
 """
 
+
 def _load_supervisor_prompt() -> str:
     """Loads the supervisor system prompt from the YAML persona file."""
     persona = load_agent_persona("supervisor")
     # Injected into the template via supervisor_node.ainvoke
     prompt_template = persona.get("system_prompt", "")
-    
+
     # We pre-fill the few_shot_examples since they are static within a session
     # but keep {org_summary} as a placeholder for the real-time graph lookup.
     return prompt_template.replace("{few_shot_examples}", FEW_SHOT_EXAMPLES)
+
 
 # Exported for use in src/core/supervisor.py
 SUPERVISOR_SYSTEM_PROMPT = _load_supervisor_prompt()

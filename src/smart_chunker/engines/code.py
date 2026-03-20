@@ -20,7 +20,9 @@ class CodeEngine(BaseEngine):
         self.language = get_language(language_name)
         self.parser = get_parser(language_name)
 
-    def chunk(self, content: str | dict | Any, source_id: str, **_kwargs) -> List[Chunk]:
+    def chunk(
+        self, content: str | dict | Any, source_id: str, **_kwargs
+    ) -> List[Chunk]:
         if not isinstance(content, str):
             content = str(content)
 

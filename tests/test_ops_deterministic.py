@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableConfig
 
 from src.core.state import EngineeringState
 from src.nodes.ops import ops_node
@@ -45,7 +46,7 @@ class TestOpsDeterministic(unittest.IsolatedAsyncioTestCase):
         mock_load_persona.return_value = {"name": "ops", "system_prompt": "You are ops"}
         mock_build_prompt.return_value = "System prompt"
 
-        mock_tool = MagicMock()
+        mock_tool = AsyncMock()
         mock_tool.name = "execute_command"
         mock_get_tools.return_value = [mock_tool]
 
@@ -95,7 +96,7 @@ class TestOpsDeterministic(unittest.IsolatedAsyncioTestCase):
             trigger=self.trigger,
         )
 
-        result = await ops_node(state)
+        result = await ops_node(state, config=RunnableConfig())
 
         # 3. Assertions
         self.assertEqual(result["completed_step_ids"], ["STEP-1"])
@@ -106,7 +107,7 @@ class TestOpsDeterministic(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["execution_history"][0].status, StepStatus.COMPLETED)
 
         # Verify tool was called
-        mock_tool.invoke.assert_called_once_with({"command": "pytest"})
+        mock_tool.ainvoke.assert_called_once_with({"command": "pytest"})
 
     @patch("src.nodes.ops.config_manager.get_agent_llm")
     @patch("src.nodes.ops.get_ops_tools")
@@ -146,7 +147,7 @@ class TestOpsDeterministic(unittest.IsolatedAsyncioTestCase):
             trigger=self.trigger,
         )
 
-        result = await ops_node(state)
+        result = await ops_node(state, config=RunnableConfig())
 
         self.assertEqual(
             result["completed_step_ids"], []

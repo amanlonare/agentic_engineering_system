@@ -1,4 +1,3 @@
-import os
 from typing import Optional
 
 from src.core.memory import LongTermMemory
@@ -29,10 +28,12 @@ class WorkspaceManager:
         """
         logger.info("Retrieving hierarchical org summary from GraphStore...")
         try:
-            results = self.graph_store.execute_query("MATCH (r:Repository) RETURN r.name, r.type")
+            results = self.graph_store.execute_query(
+                "MATCH (r:Repository) RETURN r.name, r.type"
+            )
             if not results:
                 return "No repositories found in organization."
-            
+
             summary_lines = []
             for r in results:
                 name, rtype = r[0], r[1]
@@ -40,40 +41,50 @@ class WorkspaceManager:
                     summary_lines.append(f"📂 {name} ({rtype})")
                 else:
                     summary_lines.append(f"📂 {name}")
-                
+
                 # Fetch the doc/symbol structure for this repo
                 structure = self.graph_store.get_repo_structure(name)
-                
+
                 if structure:
                     # Sort by number of symbols descending, keep top 10
-                    structure.sort(key=lambda x: len(x.get("symbols", [])), reverse=True)
+                    structure.sort(
+                        key=lambda x: len(x.get("symbols", [])), reverse=True
+                    )
                     top_docs = structure[:10]
-                    
+
                     for doc in top_docs:
                         doc_path = doc["document_path"]
                         # Just show the basename for brevity to save tokens
-                        basename = doc_path.split("/")[-1] if "/" in doc_path else doc_path
-                        
+                        basename = (
+                            doc_path.split("/")[-1] if "/" in doc_path else doc_path
+                        )
+
                         # Extract unique symbol names, ignore "unknown", limit to 5
                         symbols = []
                         for s in doc.get("symbols", []):
                             s_name = s.get("name")
-                            if s_name and s_name.lower() != "unknown" and s_name not in symbols:
+                            if (
+                                s_name
+                                and s_name.lower() != "unknown"
+                                and s_name not in symbols
+                            ):
                                 symbols.append(s_name)
-                        
+
                         symbol_str = ""
                         if symbols:
                             display_symbols = symbols[:5]
                             if len(symbols) > 5:
                                 display_symbols.append("...")
                             symbol_str = f" — [{', '.join(display_symbols)}]"
-                            
+
                         summary_lines.append(f"  📄 {basename}{symbol_str}")
-                    
+
                     if len(structure) > 10:
-                        summary_lines.append(f"  ... and {len(structure) - 10} more files. (Use codebase_tools for deep inspection)")
-                summary_lines.append("") # Empty line between repos
-            
+                        summary_lines.append(
+                            f"  ... and {len(structure) - 10} more files. (Use codebase_tools for deep inspection)"
+                        )
+                summary_lines.append("")  # Empty line between repos
+
             return "\n".join(summary_lines).strip()
         except Exception as e:
             logger.error("Failed to retrieve org summary: %s", e)
@@ -88,13 +99,18 @@ class WorkspaceManager:
         3. Dynamic String Match (all repos queried from GraphStore)
         """
         logger.info("🔍 Identifying repository for task: %s", task_description[:50])
-        
+
         # 1. Semantic Discovery via memory (includes remote repos if indexed)
         results = self.memory.retrieve_relevant_memories(task_description, k=5)
-        
+
         # Debug logging of top results
         for i, res in enumerate(results):
-            logger.debug("Vector Match %d (score unknown): %s - Content: %s...", i+1, res.metadata.get('repo_name'), res.page_content[:50])
+            logger.debug(
+                "Vector Match %d (score unknown): %s - Content: %s...",
+                i + 1,
+                res.metadata.get("repo_name"),
+                res.page_content[:50],
+            )
 
         for res in results:
             repo_name = res.metadata.get("repo_name")
@@ -104,25 +120,29 @@ class WorkspaceManager:
 
         # 2. Graph Lookup (Search for nodes labeled 'Repository' matching terms in task)
         logger.info("Searching GraphStore for repository matches...")
-        
+
         # Extract keywords (ignore short words)
         keywords = [w.lower() for w in task_description.split() if len(w) > 3]
-        
+
         for term in keywords:
             graph_results = self.graph_store.execute_query(
                 "MATCH (r:Repository) WHERE r.name CONTAINS $term RETURN r.name",
-                {"term": term}
+                {"term": term},
             )
             if graph_results:
                 repo_name = graph_results[0][0]
-                logger.info("🎯 Identified repository (Graph match on '%s'): %s", term, repo_name)
+                logger.info(
+                    "🎯 Identified repository (Graph match on '%s'): %s",
+                    term,
+                    repo_name,
+                )
                 return repo_name
 
         # 3. Exact Match Fallback
         # Dynamically list all repos from graph if vector/keyword failed
         all_repos = self.graph_store.execute_query("MATCH (r:Repository) RETURN r.name")
         repo_list = [r[0] for r in all_repos] if all_repos else []
-        
+
         for r in repo_list:
             if r.lower() in task_description.lower():
                 logger.info("🎯 Identified repository (String Match): %s", r)
@@ -135,6 +155,7 @@ class WorkspaceManager:
 if __name__ == "__main__":
     # Test discovery
     import asyncio
+
     wm = WorkspaceManager()
 
     test_tasks = [

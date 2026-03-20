@@ -11,6 +11,7 @@ from src.utils.logger import configure_logging
 logger = configure_logging("growth_tools")
 resource_manager = ResourceManager()
 
+
 async def _get_abs_path(path: str, repo_name: Optional[str] = None) -> str:
     """Resolves tool paths dynamically via ResourceManager."""
     if repo_name:
@@ -20,13 +21,15 @@ async def _get_abs_path(path: str, repo_name: Optional[str] = None) -> str:
             return os.path.join(base_dir, path)
         except Exception:
             pass
-    
+
     # Return path as-is if no repo provided or resolution fails
     return path
 
 
 @tool
-async def analyze_prediction_accuracy(path: str = "data/movement_predictions.csv", repo_name: Optional[str] = None) -> str:
+async def analyze_prediction_accuracy(
+    path: str = "data/movement_predictions.csv", repo_name: Optional[str] = None
+) -> str:
     """
     Analyzes mobility prediction accuracy (predicted vs actual modes).
     Returns per-region and per-mode accuracy and confusion clusters.
@@ -106,7 +109,9 @@ async def analyze_prediction_accuracy(path: str = "data/movement_predictions.csv
 
 
 @tool
-async def detect_activity_trends(path: str = "data/movement_predictions.csv", repo_name: Optional[str] = None) -> str:
+async def detect_activity_trends(
+    path: str = "data/movement_predictions.csv", repo_name: Optional[str] = None
+) -> str:
     """
     Detects declining user activity trends which might indicate churn.
     Returns a list of users with significant drops in movement volume.

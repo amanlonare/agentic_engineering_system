@@ -3,6 +3,7 @@ import logging
 
 import pytest
 from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableConfig
 
 from src.core.state import EngineeringState
 from src.core.supervisor import supervisor_node
@@ -56,7 +57,7 @@ async def test_deterministic_routing():
     )
 
     print("\n--- Scenario A: Plan exists, 0 steps completed ---")
-    decision_a = await supervisor_node(state_a)
+    decision_a = await supervisor_node(state_a, config=RunnableConfig())
     messages_a = decision_a.get("messages", [])
     reasoning_a = messages_a[0].content if messages_a else "N/A"
     print(f"Result: {decision_a.get('next_node')} | Reasoning: {reasoning_a}")
@@ -81,7 +82,7 @@ async def test_deterministic_routing():
     )
 
     print("\n--- Scenario B: STEP-1 ('coder') completed ---")
-    decision_b = await supervisor_node(state_b)
+    decision_b = await supervisor_node(state_b, config=RunnableConfig())
     messages_b = decision_b.get("messages", [])
     reasoning_b = messages_b[0].content if messages_b else "N/A"
     print(f"Result: {decision_b.get('next_node')} | Reasoning: {reasoning_b}")
@@ -107,7 +108,7 @@ async def test_deterministic_routing():
     )
 
     print("\n--- Scenario C: All steps completed ---")
-    decision_c = await supervisor_node(state_c)
+    decision_c = await supervisor_node(state_c, config=RunnableConfig())
     messages_c = decision_c.get("messages", [])
     reasoning_c = messages_c[0].content if messages_c else "N/A"
     print(f"Result: {decision_c.get('next_node')} | Reasoning: {reasoning_c}")

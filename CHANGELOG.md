@@ -1,5 +1,36 @@
 # Changelog
 
+## [2026-03-19]
+
+### Summary of Traceability & Resource Resilience
+Successfully resolved initialization errors in **Langfuse Tracing** and hardened the **ResourceManager** to prevent "AttributeError" and "Unexpected keyword" crashes during task cleanup. Refined the **CLI interactive loop** to ensure seamless handoffs between the Supervisor and Planning nodes.
+
+### Modified
+- **Tracing Initialization**: Updated `src/core/tracing.py` to use environment variables for `secret_key` and `host`, resolving constructor signature mismatches.
+- **Main Execution Loop**: Fixed `main.py` to propagate `thread_id` and `user_id` via LangChain metadata for accurate trace attribution.
+- **Ops Node Stability**: Corrected the `ResourceManager` cleanup logic in `src/nodes/ops.py` to properly await the `cleanup()` method.
+
+## [2026-03-19]
+
+### Summary of Agentic Architecture Overhaul & Tracing Integration
+Implemented a major architectural upgrade to the core orchestration layer. Introduced **Langfuse Tracing** for deep observability across the agentic graph and the **ResourceManager** for managing ephemeral GitHub/GDrive contexts. Standardized all agent nodes (`planning`, `coder`, `ops`, `growth`) to use native `RunnableConfig` for tracing and metadata propagation.
+
+### Added
+- **Langfuse Observability**: Deployed `src/core/tracing.py` and integrated `CallbackHandler` across all LLM and tool-calling boundaries.
+- **Unified Resource Manager**: Introduced `src/core/resource_manager.py` to handle remote file access, smart context discovery, and automated workspace cleanup.
+- **Ingestion Pipeline**: Deployed `src/core/ingestion.py` to consolidate repository analysis and semantic indexing.
+- **Google Drive Tooling**: Added `src/tools/gdrive.py` for direct document operations through MCP.
+- **Task Cleanup Node**: Introduced `src/nodes/cleanup.py` to systematically prune transient stores and workspaces after completion.
+
+### Modified
+- **Orchestration Nodes**: Fully refactored `src/nodes/` to pass `config` through all `ainvoke` and tool calls.
+- **State Schema Expansion**: Updated `EngineeringState` with `branch_name`, `is_lightweight`, and `active_step_id` for deterministic execution tracking.
+- **Supervisor Workflow**: Overhauled `supervisor.yaml` and `supervisor.py` for plan-driven multi-step orchestration.
+
+### Fixed
+- **Search/Replace Block Hallucination**: Hardened the `coder.yaml` instructions to prioritize exact whitespace matches and first-occurrence patches.
+- **Import Path Consistency**: Resolved lingering `ModuleNotFoundError` issues by enforcing absolute imports across the entire `src/` directory.
+
 ## [2026-03-16]
 
 ### Summary of MCP Expansion & RAG Optimization

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict
 
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 
 from src.core.config_manager import app_config, config_manager
@@ -17,7 +17,10 @@ logger = configure_logging("planning")
 # Core managers
 workspace_manager = WorkspaceManager()
 
-async def planning_node(state: EngineeringState, config: RunnableConfig) -> Dict[str, Any]:
+
+async def planning_node(
+    state: EngineeringState, config: RunnableConfig
+) -> Dict[str, Any]:
     """
     Planning Agent: Designs technical implementation plans.
     """
@@ -30,30 +33,42 @@ async def planning_node(state: EngineeringState, config: RunnableConfig) -> Dict
         task_desc = state.messages[0].content if state.messages else ""
         identified_repo = await workspace_manager.identify_repository(str(task_desc))
         if identified_repo:
-            logger.info("🎯 Dynamic Discovery: Identified repository '%s' for task.", identified_repo)
+            logger.info(
+                "🎯 Dynamic Discovery: Identified repository '%s' for task.",
+                identified_repo,
+            )
             repo = identified_repo
         else:
-            logger.info("ℹ️ Dynamic Discovery: No specific repository identified for general task.")
+            logger.info(
+                "ℹ️ Dynamic Discovery: No specific repository identified for general task."
+            )
 
     # 2. Load Persona
     persona = load_agent_persona("planning")
     system_prompt = build_system_prompt(persona).replace("{repo_name}", str(repo))
     if state.is_lightweight:
-        system_prompt = "THIS IS A LIGHTWEIGHT task. Follow the Lightweight Task Protocol.\n\n" + system_prompt
+        system_prompt = (
+            "THIS IS A LIGHTWEIGHT task. Follow the Lightweight Task Protocol.\n\n"
+            + system_prompt
+        )
 
     # 3. Setup LLM and tools
     llm = config_manager.get_agent_llm("planner")
-    
+
     # Use repo-scoped tools, filter out write_file since planner doesn't write code
     restricted_tools = get_restricted_tools(str(repo))
     tools = [t for t in restricted_tools if t.name != "write_file"]
     tools.append(search_codebase)
-    
+
     llm_with_tools = llm.bind_tools(tools)
     structured_llm = llm.with_structured_output(TechnicalPlan)
 
     # 4. Build messages
-    task_description = state.follow_up_context if state.follow_up_context else (state.messages[0].content if state.messages else "No task description")
+    task_description = (
+        state.follow_up_context
+        if state.follow_up_context
+        else (state.messages[0].content if state.messages else "No task description")
+    )
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=f"Task: {task_description}"),
@@ -63,7 +78,7 @@ async def planning_node(state: EngineeringState, config: RunnableConfig) -> Dict
         # Step 1: Multi-turn Tool-Calling Phase (Exploration)
         tool_call_count = 0
         MAX_TOOL_CALLS = 10
-        
+
         while tool_call_count < MAX_TOOL_CALLS:
             response = await llm_with_tools.ainvoke(messages, config=config)
             messages.append(response)
@@ -72,31 +87,48 @@ async def planning_node(state: EngineeringState, config: RunnableConfig) -> Dict
                 logger.info("✅ Planning Agent has completed exploration.")
                 break
 
-            logger.info("🛠️ Planning Agent calling tools: %s", [tc["name"] for tc in response.tool_calls])
+            logger.info(
+                "🛠️ Planning Agent calling tools: %s",
+                [tc["name"] for tc in response.tool_calls],
+            )
 
             for tool_call in response.tool_calls:
-                tool_instance = next((t for t in tools if t.name == tool_call["name"]), None)
+                tool_instance = next(
+                    (t for t in tools if t.name == tool_call["name"]), None
+                )
                 if tool_instance:
                     if hasattr(tool_instance, "ainvoke"):
                         result = await tool_instance.ainvoke(tool_call["args"])
                     else:
                         result = tool_instance.invoke(tool_call["args"])
                     result_str = str(result)
-                    messages.append(ToolMessage(content=result_str, tool_call_id=tool_call["id"]))
-                    
+                    messages.append(
+                        ToolMessage(content=result_str, tool_call_id=tool_call["id"])
+                    )
+
                     # Log a snippet of the result for visibility
-                    snippet = result_str[:500].replace('\n', ' ')
+                    snippet = result_str[:500].replace("\n", " ")
                     if len(result_str) > 500:
                         snippet += "..."
                     logger.info("🛠️ Tool '%s' returned: %s", tool_call["name"], snippet)
                 else:
-                    logger.warning("Planning Agent tried unauthorized tool: %s", tool_call["name"])
-                    messages.append(ToolMessage(content=f"Error: Tool {tool_call['name']} not available.", tool_call_id=tool_call["id"]))
+                    logger.warning(
+                        "Planning Agent tried unauthorized tool: %s", tool_call["name"]
+                    )
+                    messages.append(
+                        ToolMessage(
+                            content=f"Error: Tool {tool_call['name']} not available.",
+                            tool_call_id=tool_call["id"],
+                        )
+                    )
 
             tool_call_count += 1
-            
+
         if tool_call_count >= MAX_TOOL_CALLS:
-            logger.warning("⚠️ Planning Agent reached max tool calls (%d). Forcing stop.", MAX_TOOL_CALLS)
+            logger.warning(
+                "⚠️ Planning Agent reached max tool calls (%d). Forcing stop.",
+                MAX_TOOL_CALLS,
+            )
 
         # Step 2: Final structured output call
         logger.info("📋 Generating structured TechnicalPlan...")
@@ -118,62 +150,75 @@ async def planning_node(state: EngineeringState, config: RunnableConfig) -> Dict
         if plan and repo and repo != "General" and len(plan.steps) > 0:
             # Add Git step logic (as before, but using the discovered repo)
             last_step = plan.steps[-1]
-            has_git_link = any(kw in last_step.description.lower() for kw in ["git", "push", "commit"])
+            has_git_link = any(
+                kw in last_step.description.lower() for kw in ["git", "push", "commit"]
+            )
             if not has_git_link:
                 import re
-                slug = re.sub(r"[^a-z0-9]+", "-", plan.title.lower()).strip("-")[:30] or "task-update"
+
+                slug = (
+                    re.sub(r"[^a-z0-9]+", "-", plan.title.lower()).strip("-")[:30]
+                    or "task-update"
+                )
                 branch_name = f"{app_config.system.branch_prefix}{slug}-{datetime.now().strftime('%m%d%H%M')}"
-                
-                plan.steps.append(ExecutionStep(
-                    id=f"STEP-{len(plan.steps) + 1}",
-                    description=f"Commit and push changes to origin branch '{branch_name}'.",
-                    assigned_to="ops",
-                    target_repo=repo,
-                    dependencies=[last_step.id],
-                    verification_criteria=f"git add -A && git commit -m 'feat: {plan.title}' && git push -u origin {branch_name}"
-                ))
+
+                plan.steps.append(
+                    ExecutionStep(
+                        id=f"STEP-{len(plan.steps) + 1}",
+                        description=f"Commit and push changes to origin branch '{branch_name}'.",
+                        assigned_to="ops",
+                        target_repo=repo,
+                        dependencies=[last_step.id],
+                        verification_criteria=f"git add -A && git commit -m 'feat: {plan.title}' && git push -u origin {branch_name}",
+                    )
+                )
                 plan_md += f"### STEP-{len(plan.steps)}: Commit and Push\n"
-                plan_md += f"- **Assignee:** ops\n"
+                plan_md += "- **Assignee:** ops\n"
                 plan_md += f"- **Verification:** `git push origin {branch_name}`\n\n"
 
         # Step 4: Persist the plan locally for debugging/reference (avoids repo clutter)
         from pathlib import Path
-        
+
         # Get thread_id from state if available, or generate a fallback
-        thread_id = state.trigger.payload.get("thread_id", "unknown") if state.trigger and hasattr(state.trigger, 'payload') else "manual-task"
-        
+        thread_id = (
+            state.trigger.payload.get("thread_id", "unknown")
+            if state.trigger and hasattr(state.trigger, "payload")
+            else "manual-task"
+        )
+
         storage_base = Path(app_config.system.plan_storage_base)
         plan_filename = f"task_{thread_id}.md"
         plan_path = storage_base / plan_filename
-        
+
         try:
-             # Ensure the storage directory exists
-             storage_base.mkdir(parents=True, exist_ok=True)
-             
-             # Add a header with metadata
-             header = f"<!-- THREAD_ID: {thread_id} | REPO: {repo} | DATE: {datetime.now().isoformat()} -->\n\n"
-             final_file_content = f"{header}{plan_md}"
-             
-             plan_path.write_text(final_file_content, encoding="utf-8")
-             logger.info(f"✅ Technical Plan persisted to {plan_path} (AES Local)")
-             
-             content = (
-                 f"### 📋 Technical Plan Generated\n"
-                 f"The execution strategy has been saved to `{plan_path}` for reference.\n\n"
-                 f"{plan_md}"
-             )
+            # Ensure the storage directory exists
+            storage_base.mkdir(parents=True, exist_ok=True)
+
+            # Add a header with metadata
+            header = f"<!-- THREAD_ID: {thread_id} | REPO: {repo} | DATE: {datetime.now().isoformat()} -->\n\n"
+            final_file_content = f"{header}{plan_md}"
+
+            plan_path.write_text(final_file_content, encoding="utf-8")
+            logger.info(f"✅ Technical Plan persisted to {plan_path} (AES Local)")
+
+            content = (
+                f"### 📋 Technical Plan Generated\n"
+                f"The execution strategy has been saved to `{plan_path}` for reference.\n\n"
+                f"{plan_md}"
+            )
         except Exception as write_err:
-             logger.warning(f"Failed to persist PLAN.md locally: {write_err}")
-             content = (
-                 f"### 📋 Technical Plan Generated (Persistence Failed)\n\n"
-                 f"{plan_md}"
-             )
+            logger.warning(f"Failed to persist PLAN.md locally: {write_err}")
+            content = (
+                f"### 📋 Technical Plan Generated (Persistence Failed)\n\n{plan_md}"
+            )
 
         return {
             "messages": [AIMessage(content=content)],
             "task_plan": plan,
             "approval_status": ApprovalStatus.APPROVED,
-            "trigger": state.trigger.model_copy(update={"repo_name": repo}) if state.trigger else None
+            "trigger": state.trigger.model_copy(update={"repo_name": repo})
+            if state.trigger
+            else None,
         }
 
     except Exception as e:

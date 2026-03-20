@@ -165,7 +165,9 @@ class MCPClientManager:
                 await stack.aclose()
             except Exception as e:
                 # Catch scope mismatch errors during task-switching
-                logger.warning(f"Note: Error during cleanup of {name} (may be expected in cross-task sessions): {e}")
+                logger.warning(
+                    f"Note: Error during cleanup of {name} (may be expected in cross-task sessions): {e}"
+                )
         self.sessions = {}
         self.exit_stacks = {}
         self._tools_cache = {}

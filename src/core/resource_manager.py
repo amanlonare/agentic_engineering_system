@@ -1,9 +1,8 @@
 import logging
-import tempfile
-import subprocess
 import shutil
-from typing import List, Optional
+import subprocess
 from pathlib import Path
+from typing import List, Optional
 
 from src.core.config_manager import app_config
 from src.core.mcp_client import MCPClientManager
@@ -38,16 +37,23 @@ class ResourceManager:
             return str(local_path)
 
         # Check if we need to resolve owner/repo from GraphStore
-        if repo_name and repo_name != "Other Sources" and "/" not in repo_name and not repo_name.startswith("["):
+        if (
+            repo_name
+            and repo_name != "Other Sources"
+            and "/" not in repo_name
+            and not repo_name.startswith("[")
+        ):
             try:
                 from src.core.graph_store import GraphStore
+
                 gs = GraphStore()
                 results = gs.execute_query(
                     "MATCH (r:Repository {name: $name}) RETURN r.remote_url",
-                    {"name": repo_name}
+                    {"name": repo_name},
                 )
                 if results and results[0] and results[0][0]:
                     from urllib.parse import urlparse
+
                     remote_url = results[0][0]
                     parsed = urlparse(remote_url)
                     parts = parsed.path.strip("/").split("/")
@@ -55,10 +61,16 @@ class ResourceManager:
                         identified_name = f"{parts[0]}/{parts[1]}"
                         if identified_name.endswith(".git"):
                             identified_name = identified_name[:-4]
-                        logger.debug("Resolved symbolic repo '%s' to '%s'", repo_name, identified_name)
+                        logger.debug(
+                            "Resolved symbolic repo '%s' to '%s'",
+                            repo_name,
+                            identified_name,
+                        )
                         repo_name = identified_name
             except Exception as e:
-                logger.warning("GraphStore resolution failed for '%s': %s", repo_name, e)
+                logger.warning(
+                    "GraphStore resolution failed for '%s': %s", repo_name, e
+                )
 
         # Ensure we don't end up with trailing slashes if relative_path is empty
         relative_path = relative_path.strip("/")
@@ -128,7 +140,9 @@ class ResourceManager:
                     target_dir = target_dir / parts[2]
 
                 if target_dir.exists() and target_dir.is_dir():
-                    return [str(p.relative_to(local_path)) for p in target_dir.iterdir()]
+                    return [
+                        str(p.relative_to(local_path)) for p in target_dir.iterdir()
+                    ]
                 return []
 
         # Local directory fallback
@@ -271,7 +285,12 @@ class ResourceManager:
             if not repo_name:
                 return []
 
-            logger.debug("MCP GitHub list_directory: owner=%s, repo=%s, path=%s", owner, repo_name, path)
+            logger.debug(
+                "MCP GitHub list_directory: owner=%s, repo=%s, path=%s",
+                owner,
+                repo_name,
+                path,
+            )
 
             result = await session.call_tool(
                 "get_file_contents", {"owner": owner, "repo": repo_name, "path": path}
@@ -279,6 +298,7 @@ class ResourceManager:
 
             names = []
             import json
+
             for block in result.content:
                 if hasattr(block, "text"):
                     text_val = getattr(block, "text")

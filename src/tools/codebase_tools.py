@@ -1,8 +1,6 @@
-import logging
 import os
-from typing import List, Optional
 
-from langchain_core.tools import tool, StructuredTool
+from langchain_core.tools import StructuredTool, tool
 from pydantic import BaseModel, Field
 
 from src.core.memory import LongTermMemory
@@ -89,19 +87,26 @@ async def write_file(path: str, content: str) -> str:
 
 # ── Restricted Tools (Per-Repo Scoping) ────────────────────────────
 
+
 class FilePathArgs(BaseModel):
     path: str = Field(description="The path to the file (local or mcp://)")
 
+
 class ListDirectoryArgs(BaseModel):
-    path: str = Field(default="", description="The path to the directory. Leave empty for root.")
+    path: str = Field(
+        default="", description="The path to the directory. Leave empty for root."
+    )
+
 
 class WriteFileArgs(BaseModel):
     path: str = Field(description="Path to the file to modify")
     content: str = Field(description="The new content to write to the file")
 
+
 class ReplaceInFileArgs(BaseModel):
     path: str = Field(description="Path to the file to modify")
     diff: str = Field(description="One or more SEARCH/REPLACE blocks")
+
 
 async def _enforce_scope(path: str, restriction_scope: str) -> str:
     """
@@ -117,17 +122,19 @@ async def _enforce_scope(path: str, restriction_scope: str) -> str:
         # If the input path is already an absolute MCP URI, just verify the repo name is in it
         if path.startswith("mcp://"):
             if restriction_scope not in path:
-                raise PermissionError(f"Permission Denied: MCP resource '{path}' is outside locked repo '{restriction_scope}'")
+                raise PermissionError(
+                    f"Permission Denied: MCP resource '{path}' is outside locked repo '{restriction_scope}'"
+                )
             return path
-        
+
         # Otherwise, treat input as a relative path and join it to the mcp base
         # Normalize: remove repo name from start if LLM included it
         path = path.strip("/")
         if path == restriction_scope:
             path = ""
         elif path.startswith(restriction_scope + "/"):
-            path = path[len(restriction_scope) + 1:]
-            
+            path = path[len(restriction_scope) + 1 :]
+
         clean_base = base_resource.rstrip("/")
         clean_path = path
         return f"{clean_base}/{clean_path}" if clean_path else clean_base + "/"
@@ -135,26 +142,28 @@ async def _enforce_scope(path: str, restriction_scope: str) -> str:
     # 3. Case B: Intent is a local filesystem resource
     # At this point, base_resource is an absolute local path
     base_dir = os.path.abspath(base_resource)
-    
+
     # If LLM passed an mcp:// URI to a local-only tool, we should probably fail or resolve it
     if path.startswith("mcp://"):
         # This shouldn't really happen if resolve_resource_path returned a local path,
         # but if it does, we strip the mcp prefix and try to resolve relative to base_dir
         # for maximum resilience.
-        path = path.split("/")[-1] # Fallback: last segment
+        path = path.split("/")[-1]  # Fallback: last segment
 
     if not os.path.isabs(path):
         # Handle the case where path starts with the repo name (LLM often does this)
         if path.startswith(restriction_scope + "/"):
-             path = path[len(restriction_scope) + 1:]
+            path = path[len(restriction_scope) + 1 :]
         elif path == restriction_scope:
-             path = ""
+            path = ""
         path = os.path.join(base_dir, path)
-    
+
     abs_target = os.path.abspath(path)
     if not abs_target.startswith(base_dir):
-        raise PermissionError(f"Permission Denied: Path '{path}' resolves outside locked repo '{base_dir}'")
-    
+        raise PermissionError(
+            f"Permission Denied: Path '{path}' resolves outside locked repo '{base_dir}'"
+        )
+
     return abs_target
 
 
@@ -171,7 +180,9 @@ def get_restricted_tools(restriction_scope: str) -> list:
             logger.info(f"📂 Restricted Tool: Reading resource '{safe_path}'...")
             content = await resource_manager.read_resource(safe_path)
             if len(content) > 20000:
-                return content[:20000] + "\n\n...[RESOURCE TRUNCATED TO 20,000 CHARACTERS]"
+                return (
+                    content[:20000] + "\n\n...[RESOURCE TRUNCATED TO 20,000 CHARACTERS]"
+                )
             return content
         except Exception as e:
             return str(e)
@@ -191,30 +202,34 @@ def get_restricted_tools(restriction_scope: str) -> list:
         try:
             safe_path = await _enforce_scope(path, restriction_scope)
             logger.info(f"🩹 Restricted Tool: Patching resource '{safe_path}'...")
-            
+
             content = await resource_manager.read_resource(safe_path)
-            
+
             import re
+
             pattern = re.compile(
-                r"<<<<<<< SEARCH\n(.*?)\n=======\n(.*?)\n>>>>>>> REPLACE",
-                re.DOTALL
+                r"<<<<<<< SEARCH\n(.*?)\n=======\n(.*?)\n>>>>>>> REPLACE", re.DOTALL
             )
-            
+
             blocks = pattern.findall(diff)
             if not blocks:
                 return "Error: No valid SEARCH/REPLACE blocks found in diff."
-            
+
             new_content = content
             for search_text, replace_text in blocks:
                 if search_text not in new_content:
                     # Provide helpful context on mismatch
                     return f"Error: SEARCH block not found in file '{path}'. Please ensure exact match including whitespace."
-                
+
                 # Replace only the first occurrence as per Cline rules
                 new_content = new_content.replace(search_text, replace_text, 1)
-            
+
             success = await resource_manager.write_resource(safe_path, new_content)
-            return f"Successfully applied {len(blocks)} changes to {safe_path}" if success else "Write failed during patch"
+            return (
+                f"Successfully applied {len(blocks)} changes to {safe_path}"
+                if success
+                else "Write failed during patch"
+            )
         except Exception as e:
             return str(e)
 
@@ -222,7 +237,7 @@ def get_restricted_tools(restriction_scope: str) -> list:
         """List the contents of a directory within your locked repository."""
         if not path:
             path = restriction_scope
-            
+
         try:
             safe_path = await _enforce_scope(path, restriction_scope)
             logger.info(f"📁 Restricted Tool: Listing resource '{safe_path}'...")
@@ -274,13 +289,13 @@ def get_ops_tools(restriction_scope: str) -> list:
     async def restricted_execute_command(command: str) -> str:
         """Execute a shell command within the locked repository directory."""
         import subprocess
-        
+
         # Resolve the actual local path for this repo (might be in /tmp or already local)
         try:
             base_dir = await resource_manager.resolve_resource_path(restriction_scope)
         except Exception as e:
             return f"Error resolving repository path: {e}"
-        
+
         logger.info(f"⚙️ Ops Tool: Executing command '{command}' in '{base_dir}'...")
 
         if not base_dir or not os.path.exists(base_dir):
@@ -293,8 +308,13 @@ def get_ops_tools(restriction_scope: str) -> list:
             )
 
             result = subprocess.run(
-                command, shell=True, cwd=base_dir, env=env,
-                capture_output=True, text=True, timeout=30
+                command,
+                shell=True,
+                cwd=base_dir,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=30,
             )
 
             output = f"STDOUT:\n{result.stdout}\n" if result.stdout else ""

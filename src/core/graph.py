@@ -30,6 +30,7 @@ def build_graph(checkpointer=None):
     builder.add_node(NodeName.OPS, ops_node)
     builder.add_node(NodeName.GROWTH, growth_node)
     from src.nodes.cleanup import cleanup_node
+
     builder.add_node(NodeName.CLEANUP, cleanup_node)
 
     # 2. Add edges
@@ -53,7 +54,9 @@ def build_graph(checkpointer=None):
     # All workers route back to the Supervisor when they are done
     # EXCEPT Coder which we are isolating for evaluation
     builder.add_edge(NodeName.PLANNING, NodeName.SUPERVISOR)
-    builder.add_edge(NodeName.CODER, NodeName.CLEANUP)  # 🧪 TEST: Stop after Coder (cleanup first)
+    builder.add_edge(
+        NodeName.CODER, NodeName.CLEANUP
+    )  # 🧪 TEST: Stop after Coder (cleanup first)
     for worker in [NodeName.OPS, NodeName.GROWTH]:
         builder.add_edge(worker, NodeName.SUPERVISOR)
 

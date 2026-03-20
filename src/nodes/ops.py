@@ -10,12 +10,12 @@ from langchain_core.messages import (
 from langchain_core.runnables.config import RunnableConfig
 
 from src.core.config_manager import app_config, config_manager
+from src.core.resource_manager import ResourceManager
 from src.core.state import EngineeringState
 from src.schemas import StepExecutionRecord, StepStatus, TestReport
 from src.tools.codebase_tools import get_ops_tools
 from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.utils.logger import configure_logging
-from src.core.resource_manager import ResourceManager
 
 logger = configure_logging("ops")
 resource_manager = ResourceManager()
@@ -105,8 +105,12 @@ async def ops_node(state: EngineeringState, config: RunnableConfig) -> Dict[str,
     llm = config_manager.get_agent_llm("ops")
 
     # --- Integrated Remote Tools ---
-    from src.tools.github import list_github_issues, create_github_issue, create_pull_request
-    
+    from src.tools.github import (
+        create_github_issue,
+        create_pull_request,
+        list_github_issues,
+    )
+
     tools.extend([list_github_issues, create_github_issue, create_pull_request])
 
     llm_with_tools = llm.bind_tools(tools)
@@ -163,7 +167,7 @@ async def ops_node(state: EngineeringState, config: RunnableConfig) -> Dict[str,
                         result = await tool_instance.ainvoke(tool_call["args"])
                     else:
                         result = tool_instance.invoke(tool_call["args"])
-                    
+
                     messages.append(
                         ToolMessage(tool_call_id=tool_call["id"], content=str(result))
                     )

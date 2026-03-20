@@ -16,7 +16,6 @@ from src.core.state import EngineeringState
 from src.core.workspace import WorkspaceManager
 from src.prompts.supervisor import SUPERVISOR_SYSTEM_PROMPT
 from src.schemas import GrowthRecommendationType, NodeName, RouteDecision, StepStatus
-from src.tools.codebase_tools import search_codebase
 from src.utils.logger import configure_logging
 
 logger = configure_logging("supervisor")
@@ -349,20 +348,24 @@ async def supervisor_node(state: EngineeringState, config: RunnableConfig) -> di
         )
 
         state_update = {}
-        
+
         if isinstance(result, RouteDecision):
             reasoning = result.reasoning
             next_node = NodeName(result.next_node)
-            
+
             if result.rejection_message:
-                logger.warning("🚫 Supervisor rejected query: %s", result.rejection_message)
+                logger.warning(
+                    "🚫 Supervisor rejected query: %s", result.rejection_message
+                )
                 state_update["messages"] = [AIMessage(content=result.rejection_message)]
-            
+
             if result.target_repo and state.trigger:
-                logger.info("🎯 Supervisor identified target repo: %s", result.target_repo)
+                logger.info(
+                    "🎯 Supervisor identified target repo: %s", result.target_repo
+                )
                 state.trigger.repo_name = result.target_repo
                 state_update["trigger"] = state.trigger
-                
+
         else:
             next_node = NodeName.FINISH
             reasoning = "Invalid model output, falling back to FINISH."

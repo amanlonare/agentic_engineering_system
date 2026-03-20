@@ -11,18 +11,18 @@ from langchain_core.messages import (
 from langchain_core.runnables import RunnableConfig
 
 from src.core.config_manager import app_config, config_manager
+from src.core.resource_manager import ResourceManager
 from src.core.state import EngineeringState
 from src.schemas import StepExecutionRecord, StepStatus
 from src.tools.codebase_tools import get_restricted_tools
 from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.utils.logger import configure_logging
 
-from src.core.resource_manager import ResourceManager
-
 logger = configure_logging("coder")
 
 # Global resource manager
 resource_manager = ResourceManager()
+
 
 async def _get_remote_repo_summary(repo_uri: str) -> str:
     """Provides a summarized view of a remote repository's structure."""
@@ -32,17 +32,18 @@ async def _get_remote_repo_summary(repo_uri: str) -> str:
     except Exception as e:
         return f"Error listing remote resource: {e}"
 
+
 async def _get_repo_tree(repo_name: str, max_depth: int = 3) -> str:
     """Get repo tree via ephemeral clone or remote listing."""
     from src.core.graph_store import GraphStore
+
     graph_store = GraphStore()
-    
+
     # Try to find the MCP URI from the graph store
     results = graph_store.execute_query(
-        "MATCH (r:Repository {name: $name}) RETURN r.mcp_uri",
-        {"name": repo_name}
+        "MATCH (r:Repository {name: $name}) RETURN r.mcp_uri", {"name": repo_name}
     )
-    
+
     if results and results[0][0]:
         mcp_uri = results[0][0]
         # Try remote listing first
@@ -55,11 +56,16 @@ async def _get_repo_tree(repo_name: str, max_depth: int = 3) -> str:
             local_path = await resource_manager.ensure_local_context(mcp_uri)
             lines = [f"{repo_name}/"]
             _walk_tree(local_path, "", lines, current_depth=0, max_depth=max_depth)
-            return "\n".join(lines) if len(lines) > 1 else f"{repo_name}/ (empty repository)"
+            return (
+                "\n".join(lines)
+                if len(lines) > 1
+                else f"{repo_name}/ (empty repository)"
+            )
         except Exception as e:
             return f"Could not load repo tree for {repo_name}: {e}"
-    
+
     return f"Repository '{repo_name}' not found in knowledge graph."
+
 
 def _walk_tree(path: str, prefix: str, lines: list, current_depth: int, max_depth: int):
     """Helper to build an indented tree string for local paths."""
@@ -110,15 +116,19 @@ async def coder_node(state: EngineeringState, config: RunnableConfig) -> Dict[st
             if step.id == state.active_step_id:
                 current_step = step
                 break
-    
+
     # Fallback/Rework logic
     if not current_step and state.task_plan:
         # If it's a rework but we don't have an active_step_id, find the failed step
         if is_rework:
             for step in state.task_plan.steps:
                 last_record = next(
-                    (rec for rec in reversed(state.execution_history or []) if rec.step_id == step.id),
-                    None
+                    (
+                        rec
+                        for rec in reversed(state.execution_history or [])
+                        if rec.step_id == step.id
+                    ),
+                    None,
                 )
                 if last_record and last_record.status == StepStatus.FAILED:
                     failed_ops_step_id = step.id
@@ -138,7 +148,9 @@ async def coder_node(state: EngineeringState, config: RunnableConfig) -> Dict[st
         # Final fallback: First uncompleted coder step
         if not current_step:
             for step in state.task_plan.steps:
-                if step.assigned_to == "coder" and step.id not in (state.completed_step_ids or []):
+                if step.assigned_to == "coder" and step.id not in (
+                    state.completed_step_ids or []
+                ):
                     current_step = step
                     break
 
@@ -237,13 +249,22 @@ async def coder_node(state: EngineeringState, config: RunnableConfig) -> Dict[st
     tools = get_restricted_tools(repo)
 
     # --- Integrated Remote Tools ---
-    from src.tools.github import list_github_issues, create_github_issue, create_pull_request
-    from src.tools.gdrive import search_gdrive, list_gdrive_folder
-    
-    tools.extend([
-        list_github_issues, create_github_issue, create_pull_request,
-        search_gdrive, list_gdrive_folder
-    ])
+    from src.tools.gdrive import list_gdrive_folder, search_gdrive
+    from src.tools.github import (
+        create_github_issue,
+        create_pull_request,
+        list_github_issues,
+    )
+
+    tools.extend(
+        [
+            list_github_issues,
+            create_github_issue,
+            create_pull_request,
+            search_gdrive,
+            list_gdrive_folder,
+        ]
+    )
 
     llm = config_manager.get_agent_llm("coder")
     llm_with_tools = llm.bind_tools(tools)
@@ -264,7 +285,11 @@ async def coder_node(state: EngineeringState, config: RunnableConfig) -> Dict[st
         consecutive_dup_rounds = 0  # Force-break after N all-duplicate rounds
         # Configurable limits
         agent_cfg = app_config.agents.get("coder")
-        MAX_TOOL_CALLS = agent_cfg.max_tool_calls if agent_cfg else app_config.workflow.default_max_tool_calls
+        MAX_TOOL_CALLS = (
+            agent_cfg.max_tool_calls
+            if agent_cfg
+            else app_config.workflow.default_max_tool_calls
+        )
         MAX_DUP_ROUNDS = agent_cfg.max_duplicate_rounds if agent_cfg else 3
 
         while tool_call_count < MAX_TOOL_CALLS:
@@ -320,9 +345,9 @@ async def coder_node(state: EngineeringState, config: RunnableConfig) -> Dict[st
                             content=result_str,
                         )
                     )
-                    
+
                     # Log a snippet of the result for visibility
-                    snippet = result_str[:500].replace('\n', ' ')
+                    snippet = result_str[:500].replace("\n", " ")
                     if len(result_str) > 500:
                         snippet += "..."
                     logger.info("🛠️ Tool '%s' returned: %s", tool_call["name"], snippet)
@@ -388,10 +413,14 @@ async def coder_node(state: EngineeringState, config: RunnableConfig) -> Dict[st
                 for tc in msg.tool_calls:
                     if tc["name"] == "write_file":
                         path = tc["args"].get("path", "")
-                        if "/tests/" in path and (path.endswith(".py") or path.endswith(".js")):
+                        if "/tests/" in path and (
+                            path.endswith(".py") or path.endswith(".js")
+                        ):
                             # Extract the test-relative path regardless of prefix
                             test_idx = path.index("/tests/")
-                            clean_path = path[test_idx + 1:]  # e.g., "tests/test_feature.py"
+                            clean_path = path[
+                                test_idx + 1 :
+                            ]  # e.g., "tests/test_feature.py"
                             if clean_path not in script_matches:
                                 script_matches.append(clean_path)
 

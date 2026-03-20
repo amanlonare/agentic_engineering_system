@@ -2,9 +2,9 @@ import asyncio
 import uuid
 from datetime import datetime
 
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables.config import RunnableConfig
-from langchain_core.callbacks import BaseCallbackHandler
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from src.core.config import settings
@@ -39,18 +39,18 @@ async def main():
 
                 # 1. Create a unique thread ID for this specific task
                 thread_id = f"task_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:4]}"
-                
+
                 # Initialize Langfuse tracing
                 handler = get_langfuse_handler()
                 callbacks: list[BaseCallbackHandler] = [handler] if handler else []
-                
+
                 config: RunnableConfig = {
                     "configurable": {"thread_id": thread_id},
                     "callbacks": callbacks,
                     "metadata": {
                         "langfuse_session_id": thread_id,
-                        "langfuse_user_id": "cli-user"
-                    }
+                        "langfuse_user_id": "cli-user",
+                    },
                 }
 
                 # 2. Initialize state with the dynamic trigger
@@ -71,13 +71,13 @@ async def main():
                         if node_state is None:
                             continue
                         logger.info(f"--- Finished node: {node_name} ---")
-                        
+
                         # Print agent messages for the user to see
                         if "messages" in node_state and node_state["messages"]:
                             last_msg = node_state["messages"][-1]
                             if hasattr(last_msg, "content"):
                                 print(f"\n🤖 [{node_name}]:\n{last_msg.content}\n")
-                        
+
                         # We log internal status, but in a real CLI we might filter this
                         if node_state.get("next_action"):
                             logger.info(

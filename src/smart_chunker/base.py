@@ -8,7 +8,9 @@ class BaseEngine(ABC):
     """Abstract base class for all chunking engines (Python, MD, PDF, etc)."""
 
     @abstractmethod
-    def chunk(self, content: Union[str, dict, Any], source_id: str, **kwargs) -> List[Chunk]:
+    def chunk(
+        self, content: Union[str, dict, Any], source_id: str, **kwargs
+    ) -> List[Chunk]:
         """Process raw content into a list of structured Chunks."""
 
 
@@ -29,7 +31,7 @@ class SmartChunker:
         content: Union[str, dict, Any],
         source_id: str,
         chunk_format: str,
-        **kwargs
+        **kwargs,
     ) -> List[Chunk]:
         engine = self.engines.get(chunk_format)
         if not engine:

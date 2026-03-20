@@ -20,7 +20,9 @@ from src.utils.logger import configure_logging
 logger = configure_logging("growth")
 
 
-async def growth_node(state: EngineeringState, config: RunnableConfig) -> Dict[str, Any]:
+async def growth_node(
+    state: EngineeringState, config: RunnableConfig
+) -> Dict[str, Any]:
     """
     Growth Agent: Analyzes user metrics and proposes strategies.
     Uses LLM tool-calling to process mobility data.

@@ -107,10 +107,11 @@ class IngestionPipeline:
         # Step 3: Chunk
         repo_name = "Other Sources"  # Default fallback
         repo_type = "Unknown"
-        
+
         if identified_source.source_type == SourceType.GITHUB_REPO:
             repo_type = "GitHub"
             from urllib.parse import urlparse
+
             parsed = urlparse(identified_source.identifier)
             parts = parsed.path.strip("/").split("/")
             if len(parts) >= 2:
@@ -131,14 +132,15 @@ class IngestionPipeline:
             title = "Unknown Google Sheet"
             if isinstance(raw_content, dict):
                 # Sheets API has title inside properties
-                title = raw_content.get("properties", {}).get("title", "Unknown Google Sheet")
+                title = raw_content.get("properties", {}).get(
+                    "title", "Unknown Google Sheet"
+                )
             repo_name = f"[GSheet] {title}"
 
         if identified_source.source_type in [
             SourceType.GITHUB_REPO,
             SourceType.LOCAL_DIR,
         ]:
-
             # For repos or local dirs, raw_content is a list of file dicts: [{"path": str, "content": str, "url": str}]
             chunks = []
             for file_data in raw_content:
@@ -174,11 +176,11 @@ class IngestionPipeline:
                         source_id=file_data["url"],
                         chunk_format=engine_format,
                     )
-                    
+
                     if repo_name:
                         for c in file_chunks:
                             c.metadata.custom_attributes["repo_name"] = repo_name
-                            
+
                     chunks.extend(file_chunks)
                 except Exception as e:
                     print(f"DEBUG: Failed to chunk {file_data['path']}: {e}")
@@ -195,7 +197,9 @@ class IngestionPipeline:
         # Step 4: Index into Graph and Vector DB
         self.graph_store.upsert_source(identified_source)
         if repo_name:
-            self.graph_store.upsert_repository(repo_name, identified_source.identifier, repo_type)
+            self.graph_store.upsert_repository(
+                repo_name, identified_source.identifier, repo_type
+            )
         self.graph_store.upsert_chunks(identified_source, chunks)
         self.vector_store.upsert_chunks(chunks)
 
