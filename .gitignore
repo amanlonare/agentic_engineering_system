@@ -96,3 +96,6 @@ ingestion_sources.yaml
 # skills and plans
 .agent/
 .planning/
+
+# agent
+aider/

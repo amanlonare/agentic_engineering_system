@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+import datetime
 from typing import Any, Dict
 
 from langchain_core.messages import (
@@ -72,7 +72,7 @@ async def coder_node(state: EngineeringState, config: RunnableConfig) -> Dict[st
         slug = "".join(c if c.isalnum() else "-" for c in plan_title.lower()).strip("-")
         slug = "-".join(filter(None, slug.split("-")))[:30]
         # Use a timestamp once for the session to ensure uniqueness
-        state.branch_name = f"feat/{slug}-{datetime.now().strftime('%m%d%H%M')}"
+        state.branch_name = f"feat/{slug}-{datetime.datetime.now().strftime('%m%d%H%M')}"
         logger.info("🌿 Generated unified branch name for this plan: %s", state.branch_name)
     
     branch_name = state.branch_name
