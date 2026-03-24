@@ -57,7 +57,7 @@ async def planning_node(
 
     # Use repo-scoped tools, filter out write_file since planner doesn't write code
     restricted_tools = get_restricted_tools(str(repo))
-    tools = [t for t in restricted_tools if t.name != "write_file"]
+    tools = [t for t in restricted_tools if t.name not in ("write_file", "replace_in_file")]
     tools.append(search_codebase)
 
     llm_with_tools = llm.bind_tools(tools)

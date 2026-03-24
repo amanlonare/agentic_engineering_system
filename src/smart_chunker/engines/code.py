@@ -70,7 +70,18 @@ class CodeEngine(BaseEngine):
             (method_definition
                 name: (property_identifier) @name
             ) @func
-            (arrow_function) @func
+            (variable_declarator
+                name: (identifier) @name
+                value: (arrow_function)
+            ) @func
+            (variable_declarator
+                name: (identifier) @name
+                value: (function)
+            ) @func
+            (pair
+                key: (property_identifier) @name
+                value: (arrow_function)
+            ) @func
             """
         elif self.language_name in ["typescript", "tsx"]:
             query_scm = """
@@ -83,7 +94,18 @@ class CodeEngine(BaseEngine):
             (method_definition
                 name: (property_identifier) @name
             ) @func
-            (arrow_function) @func
+            (variable_declarator
+                name: (identifier) @name
+                value: (arrow_function)
+            ) @func
+            (variable_declarator
+                name: (identifier) @name
+                value: (function)
+            ) @func
+            (pair
+                key: (property_identifier) @name
+                value: (arrow_function)
+            ) @func
             (interface_declaration
                 name: (type_identifier) @name
             ) @class
@@ -117,16 +139,24 @@ class CodeEngine(BaseEngine):
                     or node.child_by_field_name("identifier")
                     or node.child_by_field_name("property_identifier")
                 )
-                if not name_node and node.type in [
-                    "interface_declaration",
-                    "class_declaration",
-                ]:
-                    # Search for type_identifier in children
-                    for child in node.children:
-                        if child.type == "type_identifier":
-                            name_node = child
-                            break
+                if not name_node:
+                    # Specific for the variable_declarator/pair captures in JS/TS
+                    if node.type in ["variable_declarator", "pair"]:
+                        # The @name capture in the SCM query will be in the captures list
+                        # but here we are iterating over 'node' where tag is 'class' or 'func'.
+                        # For 'variable_declarator', the name is child with field 'name'.
+                        name_node = node.child_by_field_name("name") or node.child_by_field_name("key")
+                    elif node.type in ["interface_declaration", "class_declaration"]:
+                        # Search for type_identifier in children
+                        for child in node.children:
+                            if child.type == "type_identifier":
+                                name_node = child
+                                break
+                                
                 symbol_name = self._get_node_text(name_node, content)
+                if not symbol_name and node.type == "arrow_function":
+                    # Fallback for old-style direct arrow captures if they persist
+                    symbol_name = "anonymous_arrow"
 
                 # Signature extraction
                 signature_end = content.find("\n", start_byte)

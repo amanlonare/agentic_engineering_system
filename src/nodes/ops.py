@@ -100,18 +100,18 @@ async def ops_node(state: EngineeringState, config: RunnableConfig) -> Dict[str,
     # 2. Setup Persona and Tools
     persona = load_agent_persona("ops")
     system_prompt = build_system_prompt(persona)
-    tools = get_ops_tools(repo)
+    
+    current_branch = state.branch_name or None
+    tools = get_ops_tools(repo, branch=current_branch)
 
     llm = config_manager.get_agent_llm("ops")
 
     # --- Integrated Remote Tools ---
     from src.tools.github import (
-        create_github_issue,
-        create_pull_request,
-        list_github_issues,
+        list_branches,
     )
 
-    tools.extend([list_github_issues, create_github_issue, create_pull_request])
+    tools.extend([list_branches])
 
     llm_with_tools = llm.bind_tools(tools)
 
@@ -249,19 +249,8 @@ async def ops_node(state: EngineeringState, config: RunnableConfig) -> Dict[str,
                 report.success = True
 
         # 5. Extract Branch Name (if a git push occurred)
-        branch_name = None
-        for msg in messages:
-            if isinstance(msg, ToolMessage) and "git push" in str(msg.content):
-                pass
-
-        # Look for the final git branch name in the LLM's final response
-        last_content = str(getattr(messages[-1], "content", ""))
-        if report.success and "feature/" in last_content:
-            import re
-
-            match = re.search(r"feature/[\w\-]+", last_content)
-            if match:
-                branch_name = match.group(0)
+        # Legacy: ops previously searched for branch name. Now handled by coder.
+        branch_name = state.branch_name
 
         # 6. Populate Execution History
         if completed_ids and current_step:
@@ -290,17 +279,8 @@ async def ops_node(state: EngineeringState, config: RunnableConfig) -> Dict[str,
             "validation_report": report,
             "completed_step_ids": completed_ids if report.success else [],
             "execution_history": history,
+            "branch_name": branch_name,
         }
-
-        if branch_name:
-            # We use a state update for branch_name if the global state schema supports it,
-            # or append it to the outcome history. Since EngineeringState currently has no
-            # explicit `branch_name` field, we will inject it into the final message.
-            last_msg_content = str(getattr(messages[-1], "content", ""))
-            if isinstance(last_msg_content, str):
-                messages[-1].content = (
-                    last_msg_content + f"\n\n[STATE_INJECT:BRANCH:{branch_name}]"
-                )
 
         return response_payload
     except Exception:

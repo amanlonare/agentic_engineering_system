@@ -246,21 +246,19 @@ async def coder_node(state: EngineeringState, config: RunnableConfig) -> Dict[st
             + system_prompt
         )
 
-    tools = get_restricted_tools(repo)
+    # Use the branch from state if available
+    current_branch = state.branch_name or None
+    tools = get_restricted_tools(repo, branch=current_branch)
 
     # --- Integrated Remote Tools ---
     from src.tools.gdrive import list_gdrive_folder, search_gdrive
-    from src.tools.github import (
-        create_github_issue,
-        create_pull_request,
-        list_github_issues,
-    )
+    from src.tools.github import get_restricted_github_tools
 
+    gh_tools = await get_restricted_github_tools(repo)
+
+    tools.extend(gh_tools)
     tools.extend(
         [
-            list_github_issues,
-            create_github_issue,
-            create_pull_request,
             search_gdrive,
             list_gdrive_folder,
         ]
@@ -424,12 +422,21 @@ async def coder_node(state: EngineeringState, config: RunnableConfig) -> Dict[st
                             if clean_path not in script_matches:
                                 script_matches.append(clean_path)
 
+        # 6. Extract Branch Name from branch operations
+        branch_name = current_branch or ""
+        for msg in messages:
+            if isinstance(msg, AIMessage) and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    if tc["name"] in ("create_branch", "get_branch"):
+                        branch_name = tc["args"].get("branch", branch_name)
+
         return {
             # Only return the FINAL summary message to shared state, not all internal tool calls.
             "messages": [messages[-1]],
             "completed_step_ids": completed_ids,
             "execution_history": history,  # Always return history
             "verification_scripts": script_matches,
+            "branch_name": branch_name,
         }
 
     except Exception as e:

@@ -163,10 +163,13 @@ class MCPClientManager:
             try:
                 logger.info(f"Disconnecting MCP server '{name}'")
                 await stack.aclose()
+            except ValueError:
+                # Catch scope mismatch errors (ContextVar) during task-switching/cleanup
+                pass
             except Exception as e:
-                # Catch scope mismatch errors during task-switching
+                # Catch other potential errors during cleanup
                 logger.warning(
-                    f"Note: Error during cleanup of {name} (may be expected in cross-task sessions): {e}"
+                    f"Note: Error during cleanup of {name}: {e}"
                 )
         self.sessions = {}
         self.exit_stacks = {}

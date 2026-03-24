@@ -1,6 +1,7 @@
 import hashlib
+import os
 import re
-from typing import List
+from typing import Any, List, Union
 
 from src.smart_chunker.base import BaseEngine
 from src.smart_chunker.schemas import Chunk, ChunkMetadata, ChunkType
@@ -12,7 +13,11 @@ class MarkdownEngine(BaseEngine):
     Splits by headers (H1-H3) to maintain structural context.
     """
 
-    def chunk(self, content: str, source_id: str, **_kwargs) -> List[Chunk]:
+    def chunk(
+        self, content: Union[str, dict, Any], source_id: str, **_kwargs
+    ) -> List[Chunk]:
+        if not isinstance(content, str):
+            content = str(content)
         # Split by secondary headers (H1, H2, H3)
         # We look for lines starting with #, ##, or ###
         header_pattern = re.compile(r"^(#{1,3})\s+(.+)$", re.MULTILINE)
@@ -25,13 +30,18 @@ class MarkdownEngine(BaseEngine):
         matches = list(header_pattern.finditer(content))
 
         if not matches:
-            # No headers, treat as a single function-like chunk
+            # No headers, treat as a single chunk named after the file
+            doc_name = os.path.basename(source_id)
             return [
                 Chunk(
                     content=content,
-                    chunk_type=ChunkType.FUNCTION,
+                    chunk_type=ChunkType.MARKDOWN_SECTION,
                     metadata=ChunkMetadata(
-                        source_id=source_id, chunk_index="0", language="markdown"
+                        source_id=source_id,
+                        chunk_index="0",
+                        symbol_name=doc_name,
+                        signature=doc_name,
+                        language="markdown",
                     ),
                     hash=hashlib.md5(content.encode()).hexdigest(),
                 )

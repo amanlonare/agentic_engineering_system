@@ -40,17 +40,27 @@ class ResourceManager:
         if (
             repo_name
             and repo_name != "Other Sources"
-            and "/" not in repo_name
             and not repo_name.startswith("[")
         ):
+            # If it already contains a slash, try exact match first. If no slash, do an ENDS WITH match.
             try:
                 from src.core.graph_store import GraphStore
 
                 gs = GraphStore()
-                results = gs.execute_query(
-                    "MATCH (r:Repository {name: $name}) RETURN r.remote_url",
-                    {"name": repo_name},
-                )
+                results = None
+                
+                if "/" in repo_name:
+                    results = gs.execute_query(
+                        "MATCH (r:Repository {name: $name}) RETURN r.remote_url",
+                        {"name": repo_name},
+                    )
+                
+                if not results:
+                    results = gs.execute_query(
+                        "MATCH (r:Repository) WHERE r.name ENDS WITH $name RETURN r.remote_url LIMIT 1",
+                        {"name": repo_name if repo_name.startswith("/") else f"/{repo_name}"},
+                    )
+                    
                 if results and results[0] and results[0][0]:
                     from urllib.parse import urlparse
 
@@ -77,17 +87,17 @@ class ResourceManager:
         base_uri = f"{self.PROTOCOL_PREFIX}github/{repo_name}"
         return f"{base_uri}/{relative_path}" if relative_path else base_uri
 
-    async def read_resource(self, uri: str) -> str:
+    async def read_resource(self, uri: str, branch: Optional[str] = None) -> str:
         """Reads content from a resource URI (local file or MCP)."""
         if uri.startswith(self.PROTOCOL_PREFIX):
             try:
-                return await self._read_mcp(uri)
+                return await self._read_mcp(uri, branch=branch)
             except ConnectionError:
                 logger.info(
                     "MCP disconnected. Falling back to ephemeral clone for reading: %s",
                     uri,
                 )
-                local_path = await self.ensure_local_context(uri)
+                local_path = await self.ensure_local_context(uri, branch=branch)
                 parts = self.clean_uri(uri).split("/", 2)
                 if len(parts) > 2:
                     rel_path = parts[2]
@@ -102,11 +112,11 @@ class ResourceManager:
             return path.read_text(encoding="utf-8")
         raise FileNotFoundError(f"Local resource not found: {uri}")
 
-    async def write_resource(self, uri: str, content: str) -> bool:
+    async def write_resource(self, uri: str, content: str, branch: Optional[str] = None) -> bool:
         """Writes content to a resource URI (local file or MCP)."""
         if uri.startswith(self.PROTOCOL_PREFIX):
             try:
-                return await self._write_mcp(uri, content)
+                return await self._write_mcp(uri, content, branch=branch)
             except ConnectionError:
                 logger.warning(
                     "MCP disconnected. Cannot write to remote resource: %s", uri
@@ -123,17 +133,17 @@ class ResourceManager:
             logger.error("Failed to write to local resource %s: %s", uri, e)
             return False
 
-    async def list_resource(self, uri: str) -> List[str]:
+    async def list_resource(self, uri: str, branch: Optional[str] = None) -> List[str]:
         """Lists contents of a resource URI (local dir or MCP)."""
         if uri.startswith(self.PROTOCOL_PREFIX):
             try:
-                return await self._list_mcp(uri)
+                return await self._list_mcp(uri, branch=branch)
             except ConnectionError:
                 logger.info(
                     "MCP disconnected. Falling back to ephemeral clone for listing: %s",
                     uri,
                 )
-                local_path = await self.ensure_local_context(uri)
+                local_path = await self.ensure_local_context(uri, branch=branch)
                 parts = self.clean_uri(uri).split("/", 2)
                 target_dir = Path(local_path)
                 if len(parts) > 2:
@@ -171,7 +181,7 @@ class ResourceManager:
             logger.info("Auto-connecting to Google Drive MCP: %s", cmd_str)
             await self.mcp_manager.connect_stdio("gdrive", cmd_parts[0], cmd_parts[1:])
 
-    async def _read_mcp(self, uri: str) -> str:
+    async def _read_mcp(self, uri: str, branch: Optional[str] = None) -> str:
         """Translates mcp:// URI to an MCP tool call."""
         # URI format: mcp://server/owner/repo/path
         uri_no_proto = self.clean_uri(uri)
@@ -184,7 +194,7 @@ class ResourceManager:
 
         await self._ensure_mcp_connection(server)
 
-        logger.info("Proxying read to MCP server '%s' for '%s'", server, remainder)
+        logger.info("Proxying read to MCP server '%s' for '%s' (branch: %s)", server, remainder, branch)
 
         session = self.mcp_manager.sessions.get(server)
         if not session:
@@ -197,14 +207,34 @@ class ResourceManager:
                 raise ValueError(f"Invalid GitHub MCP URI (missing path): {uri}")
             owner, repo_name, path = subparts
 
+            args = {"owner": owner, "repo": repo_name, "path": path}
+            if branch:
+                args["branch"] = branch
+
             result = await session.call_tool(
-                "get_file_contents", {"owner": owner, "repo": repo_name, "path": path}
+                "get_file_contents", args
             )
-            text_blocks = []
-            for block in result.content:
-                if hasattr(block, "text"):
-                    text_blocks.append(getattr(block, "text"))
-            return "".join(text_blocks)
+            
+            # The GitHub MCP tool 'get_file_contents' returns a JSON response in a text block
+            # We need to parse that JSON and decode the base64 'content' field.
+            import json
+            import base64
+            
+            combined_text = "".join(getattr(block, "text") for block in result.content if hasattr(block, "text"))
+            
+            try:
+                data = json.loads(combined_text)
+                if isinstance(data, dict) and "content" in data:
+                    content_str = data["content"]
+                    encoding = data.get("encoding", "")
+                    
+                    if encoding == "base64":
+                        return base64.b64decode(content_str).decode("utf-8")
+                    return content_str
+            except (json.JSONDecodeError, Exception) as e:
+                logger.debug("Failed to parse GitHub MCP response as JSON, returning raw text: %s", e)
+                
+            return combined_text
 
         elif server == "gdrive":
             result = await session.call_tool("read_file", {"path": remainder})
@@ -216,7 +246,7 @@ class ResourceManager:
 
         return f"[Unsupported MCP Server: {server}]"
 
-    async def _write_mcp(self, uri: str, content: str) -> bool:
+    async def _write_mcp(self, uri: str, content: str, branch: Optional[str] = None) -> bool:
         """Translates mcp:// URI to an MCP write tool call."""
         uri_no_proto = self.clean_uri(uri)
         parts = uri_no_proto.split("/", 1)
@@ -228,7 +258,7 @@ class ResourceManager:
 
         await self._ensure_mcp_connection(server)
 
-        logger.info("Proxying write to MCP: %s", uri)
+        logger.info("Proxying write to MCP: %s (branch: %s)", uri, branch)
 
         session = self.mcp_manager.sessions.get(server)
         if not session:
@@ -240,22 +270,37 @@ class ResourceManager:
                 raise ValueError(f"Invalid GitHub MCP URI (missing path): {uri}")
             owner, repo_name, path = subparts
 
-            await session.call_tool(
-                "create_or_update_file",
-                {
-                    "owner": owner,
-                    "repo": repo_name,
-                    "path": path,
-                    "content": content,
-                    "message": "Update via Agentic Engineering System",
-                    "branch": app_config.system.default_branch,
-                },
-            )
+            target_branch = branch or app_config.system.default_branch
+            if not target_branch or target_branch.lower() in ["main", "master", ""]:
+                error_msg = f"Strict branching policy violation: Cannot write commit directly to '{target_branch}'. A separate feature branch must be crated and used."
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+
+            try:
+                await session.call_tool(
+                    "create_or_update_file",
+                    {
+                        "owner": owner,
+                        "repo": repo_name,
+                        "path": path,
+                        "content": content,
+                        "message": "Update via Agentic Engineering System",
+                        "branch": target_branch,
+                    },
+                )
+            except Exception as e:
+                error_str = str(e)
+                if "Branch" in error_str and "not found" in error_str:
+                    raise ValueError(
+                        f"ERROR: Branch '{target_branch}' does not exist on remote. "
+                        f"You MUST call 'create_branch' before writing or patching files on a new branch."
+                    )
+                raise e
             return True
 
         return False
 
-    async def _list_mcp(self, uri: str) -> List[str]:
+    async def _list_mcp(self, uri: str, branch: Optional[str] = None) -> List[str]:
         """Translates mcp:// URI to an MCP list tool call."""
         uri_no_proto = self.clean_uri(uri)
         parts = uri_no_proto.split("/", 1)
@@ -322,7 +367,7 @@ class ResourceManager:
 
         return []
 
-    async def ensure_local_context(self, uri: str) -> str:
+    async def ensure_local_context(self, uri: str, branch: Optional[str] = None) -> str:
         """
         Ensures a remote repo is available locally (via clone) and returns local path.
         """

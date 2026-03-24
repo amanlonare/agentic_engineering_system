@@ -1,5 +1,25 @@
 # Changelog
 
+## [2026-03-23]
+
+### Summary of System Reliability & Multi-Repo Robustness
+Successfully implemented a robust file-patching system and dynamic branch resolution engine. These updates eliminate "SEARCH/REPLACE" mismatch errors caused by LLM hallucinations and ensure compatibility across repositories using `main`, `master`, or custom default branches. Hardened security by blocking direct commits to critical branches and improved observability through refined logging and exception handling.
+
+### Added
+- **Dynamic Branch Resolution**: Implemented `_get_default_branch` in `src/tools/github.py` to query the GitHub API, allowing PRs and branches to target the correct repository-specific default branch automatically.
+- **Fuzzy Patching Fallback**: Added a normalization layer to `restricted_replace_in_file` in `src/tools/codebase_tools.py` that ignores superficial whitespace/indentation differences when applying diffs.
+- **Flexible Tag Support**: Updated the patching regex to support common LLM hallucinations like `>>>>>>> UPDATED`, `>>>>>>> DONE`, and `>>>>>>> REPLACEMENT`.
+
+### Modified
+- **Coder Instruction Set**: Updated `src/agents/coder.yaml` with strict "Single Block Constraints" and unified SEARCH/REPLACE formatting rules.
+- **Auto-Connect Logic**: Integrated `_ensure_mcp_connection` across all GitHub tools to prevent mid-task disconnection errors.
+- **Security Hardening**: Updated `src/core/resource_manager.py` to strictly block direct `create_or_update` operations on `main` or `master` branches, enforcing feature-branch-only workflows.
+
+### Fixed
+- **ContextVar Cleanup Errors**: Suppressed noisy `ValueError` and `LookupError` during async session cleanup in `src/core/mcp_client.py`.
+- **Linting & Stability**: Resolved over a dozen Pydantic, Pylint, and Pyright warnings across the `tools/` and `core/` layers, including f-string vs lazy logging consistency.
+- **PR Base Target**: Fixed a bug where `create_pull_request` defaulted to `main`, causing validation failures on older `master`-based repositories.
+
 ## [2026-03-19]
 
 ### Summary of Traceability & Resource Resilience

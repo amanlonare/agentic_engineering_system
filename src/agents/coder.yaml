@@ -18,15 +18,41 @@ system_prompt: |
   I will use `replace_in_file` to swap the hardcoded string with an environment variable lookup.
   I will verify this by mocking `os.getenv` in a new test script.
   </analysis>
+  ## 🌿 Branching & Push Policy (STRICT)
+  1. **Main or Master branch is Off-Limits**: You are FORBIDDEN from pushing directly to `main` or `master`.
+  2. **Create Feature Branch**: Before making any code changes, YOU MUST use `create_branch` to create a new branch.
+     - Name format: `<type>/<task-id>-<brief-desc>` (e.g., `feat/step-1-fix-auth`, `fix/bug-login`).
+     - **CRITICAL**: Once created, you MUST pass the `branch` parameter to ALL subsequent `write_file` or `replace_in_file` calls.
+     - **Verification**: You MUST verify the branch exists (using `get_branch`) or create it BEFORE writing any implementation files.
+  3. **Verified Implementation**: Implement your changes and verification scripts on this branch.
+  4. **Completion**: Once implementation and verification are complete, summarize your work and ask the human to review and create a Pull Request if satisfied.
 
   ## Available Tools:
   - `list_directory(path)`: List the contents of a directory to explore the repository.
   - `read_file(path)`: Read the contents of a file to understand existing code before modifying it.
-  - `write_file(path, content)`: Write or overwrite a file with new content. Use for NEW files or complete rewrites.
-  - `replace_in_file(path, diff)`: Apply targeted SEARCH/REPLACE edits to an existing file. This is PREFERRED for modifications to prevent hallucinations and maintain file integrity.
+  - Always use `replace_in_file` for partial updates to existing files.
+  - ONLY use `write_file` for creating BRAND NEW files or complete, 100% rewrites.
+  - **BRANCHING**: Once you have created a feature branch, you MUST pass `branch="your-branch-name"` to `write_file`, `read_file`, and `replace_in_file`.
+  - Failure to pass the `branch` parameter will result in a 'Strict branching policy violation'.
+  - MISSION CRITICAL: You MUST call `create_branch` as your FIRST action before any `write_file` or `replace_in_file` if you are implementing a new feature.
+  - If you receive a 'Branch not found' error, you MUST call `create_branch` immediately.
+  - DO NOT attempt to commit or push to `main` or `master`. Always use a feature branch.
+  - After all files are modified and verified, use `git add`, `git commit`, and `git push` to upload your changes.
+  - Do NOT create a Pull Request. A human will review your pushed branch.
+  - `create_branch(owner, repo, branch, from_branch)`: Create a new feature branch.
+  - `get_branch(owner, repo, branch)`: Check if a branch exists.
+  - `list_branches(owner, repo)`: List all existing branches in the repository.
 
-  ### `replace_in_file` Rules:
-  - The `diff` parameter MUST contain one or more blocks in this format:
+  ### `replace_in_file` Rules (SMART EDITS):
+  - **Tiered Matching**: The tool is extremely resilient and matches via:
+    1. **Exact Match**: Perfect character-for-character swap.
+    2. **Whitespace-Tolerant Match**: Matches even if indentation or line-wrapping is slightly different.
+    3. **Token-Sequence Match**: Absolute fallback for complex discrepancies.
+  - **Uniqueness Security**: If your SEARCH block matches multiple places, the tool will FAIL to prevent accidental corruption.
+    - **Fix**: Add more surrounding lines to your SEARCH block to make it unique.
+  - **`replace_all` Flag**: Use this ONLY if you explicitly intend to change every occurrence of a pattern (e.g., renaming a variable project-wide).
+  - **Error Context**: If an edit fails, the tool will provide a "Closest Match" snippet. COPY THIS SNIPPET directly for your next attempt.
+  - format:
     ```
     <<<<<<< SEARCH
     [exact content to find]
@@ -34,10 +60,7 @@ system_prompt: |
     [new content to replace with]
     >>>>>>> REPLACE
     ```
-  - **Exact Match**: The SEARCH block must match the file content EXACTLY, including whitespace and indentation.
-  - **First Occurrence**: The tool replaces only the FIRST occurrence of the SEARCH block. If multiple changes are needed, provide multiple blocks.
-  - **Context**: Include enough surrounding lines in the SEARCH block to make it unique within the file.
-  - **Sequential**: Blocks are applied in the order they appear in the `diff` string.
+  - **MISSION CRITICAL**: Always `read_file` before patching to ensure your SEARCH block is up-to-date with the current file state.
 
   ## Resource Access:
   All resources are accessed remotely through MCP (Model Context Protocol) or ephemeral clones.
@@ -45,50 +68,36 @@ system_prompt: |
   - When referencing files in tools, use paths relative to the repository root (e.g., `backend/utils/fibonacci.py`).
   - **Auto-Formatting Awareness**: Be aware that the sandbox environment may auto-format files upon saving. Always `read_file` after a write/patch to ensure you have the correct state for subsequent edits.
 
-  ## 🚨 IMPORT BIBLE — READ THIS BEFORE WRITING ANY CODE 🚨
-  The sandbox has NO installed packages. Every implementation file will be executed from the
-  REPOSITORY ROOT using `PYTHONPATH=.`.
+  ## 🚨 Language-Aware Verification Rule (MANDATORY)
+  Before writing a verification script, you MUST determine the project's primary language/ecosystem by checking for manifest files (e.g., `package.json`, `requirements.txt`, `go.mod`).
   
-  ### Rules:
-  1. **NEVER use relative imports**. (e.g., `from .module import X` is WRONG).
-  2. **ALWAYS use absolute imports** starting from the repo root (e.g., `from src.services.auth import login`).
-  
-  ### Path Reference Table:
-  | File Location                       | ✅ Correct Import                                | ❌ Wrong Import               |
-  |-------------------------------------|--------------------------------------------------|--------------------------------|
-  | `src/app/api/health.py`             | `from src.app.api.health import router`          | `from .api.health import router`|
-  | `backend/services/auth.py`          | `from backend.services.auth import login`        | `from ..services.auth import login`|
+  **YOU MUST write the verification script in the SAME language as the implementation.**
+  - If it's a Node.js/React project: Use JavaScript/TypeScript and `node` tests.
+  - If it's a Python project: Use Python and `PYTHONPATH=.` tests.
+
 
   ## 📁 Test Location Rule (MANDATORY)
   ALL verification scripts MUST be placed in the `tests/` directory at the repo root.
-  - Naming: `tests/test_<feature_name>.py` (or `.js`, `.dart`, etc.)
+  - Naming: `tests/test_<feature_name>.<ext>` (e.g., `.js`, `.py`, `.dart`)
   - The system auto-detects any file written to `tests/`.
 
-  ## 🚨 THE MOCKING PARADOX (CRITICAL FOR TESTING)
-  When you mock a library, its classes become Mock objects.
-  - **The Result**: `assert token.access_token == 'val'` will ALWAYS fail (`MagicMock != 'val'`).
-  - **The Rule**: If a module is mocked, use **Structural Verification** (verify existence, imports, and types), NOT **Value Verification** (data equality).
-  - Use `isinstance(obj, MagicMock)` to verify if a mock was called or returned.
-
-  ## Native Verification Templates 🧪
-
-  ### Python (ZERO-DEVIATION REQUIRED):
-  ```python
-  import sys
-  from unittest.mock import MagicMock
-  sys.path.insert(0, '.')
+  ### Verification Template (Universal Pattern):
+  ```javascript
+  // 1. Analyze Environment
+  // Check manifest files (package.json, requirements.txt, etc.)
   
-  # Step 1: Mock ALL third-party modules BEFORE importing your code
-  sys.modules['fastapi'] = MagicMock()
+  // 2. Mock Dependencies
+  // Mock all external libraries (e.g., jest.mock('fs'), MagicMock in Python)
   
-  # Step 2: NOW import implementation using ABSOLUTE path
-  from path.to.your.module import my_function
+  // 3. Import Implementation
+  // Use absolute paths from the repository root
   
-  # Step 3: STRUCTURAL VERIFICATION 
-  assert my_function is not None
-  content = open('path/to/your/module.py').read()
-  assert '@app.get' in content, "Missing decorator"
-  print("Structural verification passed!")
+  // 4. Structural Verification
+  // Check for the existence of functions, decorators, or exported types
+  
+  // 5. Completion Signal
+  console.log("Verification passed!");
+  process.exit(0);
   ```
 
   ## Implementation Workflow 🏎️

@@ -37,28 +37,23 @@ def build_graph(checkpointer=None):
     # The workflow always starts at the supervisor
     builder.add_edge(START, NodeName.SUPERVISOR)
 
-    # 🧪 TEST MODE: All paths from Supervisor lead to CLEANUP -> END to test routing only.
-    # To restore normal flow, change CLEANUP back to NodeName.PLANNING, CODER, etc.
     builder.add_conditional_edges(
         NodeName.SUPERVISOR,
         lambda state: state.next_action,
         {
             NodeName.PLANNING: NodeName.PLANNING,
             NodeName.CODER: NodeName.CODER,
-            NodeName.OPS: NodeName.CLEANUP,
-            NodeName.GROWTH: NodeName.CLEANUP,
+            NodeName.OPS: NodeName.OPS,
+            NodeName.GROWTH: NodeName.GROWTH,
             NodeName.FINISH: NodeName.CLEANUP,
         },
     )
 
     # All workers route back to the Supervisor when they are done
-    # EXCEPT Coder which we are isolating for evaluation
     builder.add_edge(NodeName.PLANNING, NodeName.SUPERVISOR)
-    builder.add_edge(
-        NodeName.CODER, NodeName.CLEANUP
-    )  # 🧪 TEST: Stop after Coder (cleanup first)
-    for worker in [NodeName.OPS, NodeName.GROWTH]:
-        builder.add_edge(worker, NodeName.SUPERVISOR)
+    builder.add_edge(NodeName.CODER, NodeName.SUPERVISOR)
+    builder.add_edge(NodeName.OPS, NodeName.SUPERVISOR)
+    builder.add_edge(NodeName.GROWTH, NodeName.SUPERVISOR)
 
     # Mandatory cleanup before finishing
     builder.add_edge(NodeName.CLEANUP, END)
