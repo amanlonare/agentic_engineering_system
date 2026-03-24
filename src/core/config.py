@@ -14,6 +14,8 @@ class Settings(BaseSettings):
 
     # LLM Settings (Secrets only)
     OPENAI_API_KEY: str | None = Field(default=None, repr=False)
+    ANTHROPIC_API_KEY: str | None = Field(default=None, repr=False)
+    E2B_API_KEY: str | None = Field(default=None, repr=False)
     GITHUB_TOKEN: str | None = Field(default=None, repr=False)
     GITHUB_MCP_COMMAND: str = Field(
         default="npx -y @modelcontextprotocol/server-github", repr=True

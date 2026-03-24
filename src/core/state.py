@@ -114,3 +114,7 @@ class EngineeringState(BaseModel):
         default=0,
         description="Number of times the current active_step_id has been attempted.",
     )
+    sandbox_id: Optional[str] = Field(
+        default=None,
+        description="The ID of the persistent E2B sandbox for the current session",
+    )

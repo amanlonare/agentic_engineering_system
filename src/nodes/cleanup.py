@@ -27,11 +27,11 @@ async def cleanup_node(state: EngineeringState) -> Dict[str, Any]:
     if plan_path.exists():
         try:
             plan_path.unlink()
-            logger.info(f"🗑️ Deleted transient plan: {plan_path}")
+            logger.info("🗑️ Deleted transient plan: %s", plan_path)
         except Exception as e:
-            logger.warning(f"Failed to delete plan {plan_path}: {e}")
+            logger.warning("Failed to delete plan %s: %s", plan_path, e)
     else:
-        logger.debug(f"No transient plan found at {plan_path}")
+        logger.debug("No transient plan found at %s", plan_path)
 
     # 2. Cleanup Temporary Clones (via ResourceManager)
     from src.tools.codebase_tools import resource_manager
@@ -40,6 +40,18 @@ async def cleanup_node(state: EngineeringState) -> Dict[str, Any]:
         await resource_manager.cleanup()
         logger.info("🧼 Cleaned up ephemeral workspaces.")
     except Exception as e:
-        logger.warning(f"Failed to cleanup workspaces: {e}")
+        logger.warning("Failed to cleanup workspaces: %s", e)
 
-    return {}
+    # 3. Cleanup E2B Sandbox
+    if state.sandbox_id:
+        try:
+            from e2b import Sandbox
+            from src.core.config import settings
+            # We use Sandbox.connect to get a handle, then close/kill it
+            with Sandbox.connect(state.sandbox_id, api_key=settings.E2B_API_KEY) as sb:
+                sb.kill()
+            logger.info("🔒 Closed E2B Sandbox: %s", state.sandbox_id)
+        except Exception as e:
+            logger.warning("Failed to close E2B sandbox %s: %s", state.sandbox_id, e)
+
+    return {"sandbox_id": None}
