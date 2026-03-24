@@ -134,19 +134,16 @@ async def planning_node(
         logger.info("📋 Generating structured TechnicalPlan...")
         plan: Any = await structured_llm.ainvoke(messages, config=config)
 
-        # Step 3: Format the plan into a readable Markdown string for the user
-        plan_md = f"# Technical Plan: {plan.title}\n\n"
-        plan_md += f"**Risk Assessment:** {plan.estimated_risk}\n\n"
-        plan_md += "## Summary\n"
-        plan_md += f"{plan.summary}\n\n"
-        plan_md += "## Execution Steps\n\n"
-        for step in plan.steps:
-            plan_md += f"### {step.id}: {step.description}\n"
-            plan_md += f"- **Assignee:** {step.assigned_to}\n"
-            if step.dependencies:
-                plan_md += f"- **Dependencies:** {', '.join(step.dependencies)}\n"
-            plan_md += f"- **Verification:** `{step.verification_criteria}`\n\n"
-
+        # Step 3: Branch Naming and Git Step Logic
+        # Centralize branch name for cross-node consistency
+        import re
+        slug = (
+            re.sub(r"[^a-z0-9]+", "-", plan.title.lower()).strip("-")[:30]
+            or "task-update"
+        )
+        # Use existing branch name from state if present (e.g., re-planning), otherwise generate new
+        branch_name = state.branch_name or f"{app_config.system.branch_prefix}{slug}-{datetime.now().strftime('%m%d%H%M')}"
+        
         if plan and repo and repo != "General" and len(plan.steps) > 0:
             # Add Git step logic (as before, but using the discovered repo)
             last_step = plan.steps[-1]
@@ -154,14 +151,6 @@ async def planning_node(
                 kw in last_step.description.lower() for kw in ["git", "push", "commit"]
             )
             if not has_git_link:
-                import re
-
-                slug = (
-                    re.sub(r"[^a-z0-9]+", "-", plan.title.lower()).strip("-")[:30]
-                    or "task-update"
-                )
-                branch_name = f"{app_config.system.branch_prefix}{slug}-{datetime.now().strftime('%m%d%H%M')}"
-
                 plan.steps.append(
                     ExecutionStep(
                         id=f"STEP-{len(plan.steps) + 1}",
@@ -172,9 +161,19 @@ async def planning_node(
                         verification_criteria=f"git add -A && git commit -m 'feat: {plan.title}' && git push -u origin {branch_name}",
                     )
                 )
-                plan_md += f"### STEP-{len(plan.steps)}: Commit and Push\n"
-                plan_md += "- **Assignee:** ops\n"
-                plan_md += f"- **Verification:** `git push origin {branch_name}`\n\n"
+
+        # Update the plan Markdown for the user
+        plan_md = f"# Technical Plan: {plan.title}\n\n"
+        plan_md += f"**Risk Assessment:** {plan.estimated_risk} | **Branch:** `{branch_name}`\n\n"
+        plan_md += "## Summary\n"
+        plan_md += f"{plan.summary}\n\n"
+        plan_md += "## Execution Steps\n\n"
+        for step in plan.steps:
+            plan_md += f"### {step.id}: {step.description}\n"
+            plan_md += f"- **Assignee:** {step.assigned_to}\n"
+            if step.dependencies:
+                plan_md += f"- **Dependencies:** {', '.join(step.dependencies)}\n"
+            plan_md += f"- **Verification:** `{step.verification_criteria}`\n\n"
 
         # Step 4: Persist the plan locally for debugging/reference (avoids repo clutter)
         from pathlib import Path
@@ -215,6 +214,7 @@ async def planning_node(
         return {
             "messages": [AIMessage(content=content)],
             "task_plan": plan,
+            "branch_name": branch_name,
             "approval_status": ApprovalStatus.APPROVED,
             "trigger": state.trigger.model_copy(update={"repo_name": repo})
             if state.trigger
