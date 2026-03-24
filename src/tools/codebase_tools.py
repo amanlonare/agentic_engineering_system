@@ -429,31 +429,44 @@ def get_ops_tools(restriction_scope: str, branch: Optional[str] = None) -> list:
         if not base_dir or not os.path.exists(base_dir):
             return f"Error: Local directory for '{restriction_scope}' not found. Ensure it is cloned/ingested."
 
-        # If operating in an ephemeral clone and a branch is specified, check it out first
-        if branch and "temp_repos" in base_dir:
+        # If a branch is specified, ensure we are on it before executing
+        if branch:
             try:
-                subprocess.run(
-                    ["git", "fetch", "origin", branch],
-                    cwd=base_dir,
-                    check=True,
-                    capture_output=True,
-                )
-                subprocess.run(
-                    ["git", "checkout", branch],
-                    cwd=base_dir,
-                    check=False,
-                    capture_output=True,
-                )
-                subprocess.run(
-                    ["git", "pull", "origin", branch],
-                    cwd=base_dir,
-                    check=True,
-                    capture_output=True,
-                )
-            except subprocess.CalledProcessError as e:
-                err_msg = e.stderr.decode().strip() if e.stderr else str(e)
-                logger.warning("Failed to checkout branch %s in ephemeral clone: %s", branch, err_msg)
-                # We do not hard-fail here to allow execution if the branch was already set or doesn't strictly exist remotely yet
+                # Check if it's a git repo
+                is_git = os.path.isdir(os.path.join(base_dir, ".git"))
+                if is_git:
+                    logger.info("🌿 Switching to branch '%s' in '%s'...", branch, base_dir)
+                    # 1. Fetch
+                    subprocess.run(
+                        ["git", "fetch", "origin", branch],
+                        cwd=base_dir,
+                        check=False,
+                        capture_output=True,
+                    )
+                    # 2. Checkout (handle new or existing)
+                    result = subprocess.run(
+                        ["git", "checkout", branch],
+                        cwd=base_dir,
+                        check=False,
+                        capture_output=True,
+                    )
+                    # 3. If checkout failed, try creating it (fallback)
+                    if result.returncode != 0:
+                         subprocess.run(
+                            ["git", "checkout", "-b", branch],
+                            cwd=base_dir,
+                            check=False,
+                            capture_output=True,
+                        )
+                    # 4. Pull latest if it exists remotely
+                    subprocess.run(
+                        ["git", "pull", "origin", branch],
+                        cwd=base_dir,
+                        check=False,
+                        capture_output=True,
+                    )
+            except Exception as e:
+                logger.warning("Branch management failed: %s", e)
 
         try:
             env = os.environ.copy()
