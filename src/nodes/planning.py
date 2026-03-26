@@ -130,37 +130,41 @@ async def planning_node(
                 MAX_TOOL_CALLS,
             )
 
-        # Step 2: Final structured output call
-        logger.info("📋 Generating structured TechnicalPlan...")
-        plan: Any = await structured_llm.ainvoke(messages, config=config)
-
-        # Step 3: Branch Naming and Git Step Logic
-        # Centralize branch name for cross-node consistency
+        # Step 2: Ask LLM to produce a clean semantic slug for the branch name.
+        # We do NOT use a hardcoded noise word list — the LLM understands the intent.
         import re
-        slug = (
-            re.sub(r"[^a-z0-9]+", "-", plan.title.lower()).strip("-")[:30]
-            or "task-update"
-        )
-        # Use existing branch name from state if present (e.g., re-planning), otherwise generate new
-        branch_name = state.branch_name or f"{app_config.system.branch_prefix}{slug}-{datetime.now().strftime('%m%d%H%M')}"
-        
-        if plan and repo and repo != "General" and len(plan.steps) > 0:
-            # Add Git step logic (as before, but using the discovered repo)
-            last_step = plan.steps[-1]
-            has_git_link = any(
-                kw in last_step.description.lower() for kw in ["git", "push", "commit"]
-            )
-            if not has_git_link:
-                plan.steps.append(
-                    ExecutionStep(
-                        id=f"STEP-{len(plan.steps) + 1}",
-                        description=f"Commit and push changes to origin branch '{branch_name}'.",
-                        assigned_to="ops",
-                        target_repo=repo,
-                        dependencies=[last_step.id],
-                        verification_criteria=f"git add -A && git commit -m 'feat: {plan.title}' && git push -u origin {branch_name}",
+
+        if state.branch_name:
+            branch_name = state.branch_name
+        else:
+            slug_llm = config_manager.get_agent_llm("planning")
+            slug_resp = await slug_llm.ainvoke(
+                [
+                    HumanMessage(
+                        content=(
+                            f"Extract a concise 2-4 word kebab-case slug from the following task description "
+                            f"that captures the core technical action. Output ONLY the slug, nothing else. "
+                            f"Example: 'implement fibonacci' → 'fibonacci-series'. "
+                            f"Example: 'add user authentication to the backend api' → 'user-auth-api'. "
+                            f"Task: {task_description}"
+                        )
                     )
-                )
+                ],
+                config=config,
+            )
+            raw_slug = str(getattr(slug_resp, 'content', slug_resp)).strip().lower()
+            slug = re.sub(r"[^a-z0-9]+", "-", raw_slug).strip("-")[:35] or "task"
+            branch_name = f"{app_config.system.branch_prefix}{slug}-{datetime.now().strftime('%m%d%H%M')}"
+
+        # Inject branch name and repo requirement into the final prompt
+        messages.append(HumanMessage(content=(
+            f"Please generate the TechnicalPlan now.\n"
+            f"IMPORTANT: Do NOT create steps for git branch creation, git commit, or git push — these are handled automatically.\n"
+            f"IMPORTANT: For 'target_repo', use the full identifier '{repo}' (owner/repo) for all steps."
+        )))
+
+        logger.info("📋 Generating structured TechnicalPlan with branch: %s", branch_name)
+        plan: Any = await structured_llm.ainvoke(messages, config=config)
 
         # Update the plan Markdown for the user
         plan_md = f"# Technical Plan: {plan.title}\n\n"

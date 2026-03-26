@@ -32,7 +32,10 @@ class ExecutionStep(BaseModel):
     assigned_to: str = Field(description="Agent responsible (e.g., 'coder')")
     target_repo: Optional[str] = Field(
         default=None,
-        description="The repository name involved in this step (e.g., 'mobile-app')",
+        description=(
+            "The full repository name involved in this step as provided in the context "
+            "(e.g., 'owner/repo'). DO NOT use subdirectory names."
+        ),
     )
     dependencies: List[str] = Field(
         default_factory=list, description="IDs of steps that must complete first"

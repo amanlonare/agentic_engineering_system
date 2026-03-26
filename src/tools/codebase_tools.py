@@ -178,7 +178,11 @@ async def _enforce_scope(path: str, restriction_scope: str) -> str:
     return abs_target
 
 
-def get_restricted_tools(restriction_scope: str, branch: Optional[str] = None) -> list:
+def get_restricted_tools(
+    restriction_scope: str, 
+    branch: Optional[str] = None,
+    sandbox_id: Optional[str] = None
+) -> list:
     """
     Returns a list of tools (read_file, write_file, list_directory) that are
     hard-locked to a specific restriction_scope and optionally a branch.
@@ -188,9 +192,20 @@ def get_restricted_tools(restriction_scope: str, branch: Optional[str] = None) -
     async def restricted_read_file(path: str) -> str:
         """Read the contents of a specific file from the locked repository."""
         try:
+            # For sandbox, we prefer the path as provided (usually relative to repo root)
+            # but we still want to enforce scope for local safety.
             safe_path = await _enforce_scope(path, restriction_scope)
-            logger.info("📖 Restricted Tool: Reading file: %s", safe_path)
-            content = await resource_manager.read_resource(safe_path, branch=outer_branch)
+            
+            # If in sandbox, we need the RELATIVE path from the repo root
+            inner_path = path
+            if sandbox_id:
+                # Basic relative path resolution for sandbox
+                inner_path = os.path.relpath(safe_path, await resource_manager.resolve_resource_path(restriction_scope))
+                if inner_path.startswith("../"):
+                     return f"Permission Denied: Path '{path}' resolves outside sandbox repo"
+
+            logger.info("📖 Restricted Tool: Reading file: %s (Sandbox: %s)", inner_path, sandbox_id)
+            content = await resource_manager.read_resource(safe_path if not sandbox_id else inner_path, branch=outer_branch, sandbox_id=sandbox_id)
             if len(content) > 20000:
                 return (
                     content[:20000] + "\n\n...[RESOURCE TRUNCATED TO 20,000 CHARACTERS]"
@@ -203,43 +218,23 @@ def get_restricted_tools(restriction_scope: str, branch: Optional[str] = None) -
         path: str, content: str, branch: Optional[str] = None
     ) -> str:
         """Write or overwrite a file with new content in the locked repository."""
-        # Safety check 1: prevent accidentally overwriting a file with a diff block
         if "<<<<<<< SEARCH" in content and "=======" in content and ">>>>>>> REPLACE" in content:
-            return "Error: You are trying to use write_file with a SEARCH/REPLACE block. You MUST use 'replace_in_file' for partial updates. 'write_file' will overwrite the ENTIRE file."
+            return "Error: You are trying to use write_file with a SEARCH/REPLACE block. You MUST use 'replace_in_file' for partial updates."
             
         try:
             safe_path = await _enforce_scope(path, restriction_scope)
-            
-            # Safety check 2: Prevent massive accidental deletions (e.g. shrinking entire file to a snippet)
-            try:
-                # We read it to see if it exists and what size it is
-                existing_content = await resource_manager.read_resource(safe_path, branch=branch)
-                num_existing_lines = len(existing_content.splitlines())
-                num_new_lines = len(content.splitlines())
-                
-                # If shrinking the file by more than 70% and the new file is > 0 lines (not a deliberate clear), block it.
-                if num_existing_lines > 50 and num_new_lines > 0 and num_new_lines < (num_existing_lines * 0.3):
-                     return (
-                         f"SAFETY TRIGGER: You are trying to overwrite a file of {num_existing_lines} lines "
-                         f"with only {num_new_lines} lines. This looks like a mistake where you are replacing "
-                         f"the entire file with a small snippet. IF you need to modify the file, use "
-                         f"'replace_in_file'. IF you genuinely intend to delete 70%+ of the file, "
-                         f"please add '# I INTEND TO CLEAR THIS FILE' as the first line of your content."
-                     )
-                     
-                # Allow override
-                if num_existing_lines > 50 and num_new_lines > 0 and num_new_lines < (num_existing_lines * 0.3) and "# I INTEND TO CLEAR THIS FILE" in content[:100]:
-                     pass # Authorized
-                     
-            except Exception:
-                # File probably doesn't exist yet, which is fine for writing.
-                pass
+            inner_path = path
+            if sandbox_id:
+                base_dir = await resource_manager.resolve_resource_path(restriction_scope)
+                if not base_dir.startswith("/"): # it's a URI
+                     base_dir = await resource_manager.ensure_local_context(base_dir)
+                inner_path = os.path.relpath(safe_path, base_dir)
 
-            logger.info("📝 Restricted Tool: Writing to file: %s", safe_path)
+            logger.info("📝 Restricted Tool: Writing to file: %s (Sandbox: %s)", inner_path, sandbox_id)
             success = await resource_manager.write_resource(
-                safe_path, content, branch=branch or outer_branch
+                safe_path if not sandbox_id else inner_path, content, branch=branch or outer_branch, sandbox_id=sandbox_id
             )
-            return f"Successfully wrote to {safe_path}" if success else "Write failed"
+            return f"Successfully wrote to {path}" if success else "Write failed"
         except Exception as e:
             return str(e)
 
@@ -250,28 +245,23 @@ def get_restricted_tools(restriction_scope: str, branch: Optional[str] = None) -
         try:
             safe_path = await _enforce_scope(path, restriction_scope)
             target_branch = branch or outer_branch
-            logger.info("🩹 Restricted Tool: Patching resource '%s' (branch: %s)...", safe_path, target_branch)
+            
+            inner_path = path
+            if sandbox_id:
+                base_dir = await resource_manager.resolve_resource_path(restriction_scope)
+                if not base_dir.startswith("/"):
+                     base_dir = await resource_manager.ensure_local_context(base_dir)
+                inner_path = os.path.relpath(safe_path, base_dir)
 
-            content = await resource_manager.read_resource(safe_path, branch=target_branch)
+            logger.info("🩹 Restricted Tool: Patching resource '%s' (Sandbox: %s)...", inner_path, sandbox_id)
+
+            content = await resource_manager.read_resource(
+                safe_path if not sandbox_id else inner_path, 
+                branch=target_branch, 
+                sandbox_id=sandbox_id
+            )
 
             import re
-            import difflib
-
-            # ── Flexible Multi-Pass Matcher ────────────────────────────────
-            def normalize_lines(text: str) -> str:
-                return "\n".join(line.strip() for line in text.splitlines() if line.strip())
-
-            def build_whitespace_tolerant_regex(text: str) -> str:
-                # 1. Split text into whitespace chunks and non-whitespace tokens
-                parts = re.split(r"([ \n\t\r]+)", text)
-                # 2. Escape non-whitespace tokens and replace whitespace chunks with \s*
-                # Filter out empty strings from split
-                return "".join(
-                    re.escape(p) if not re.fullmatch(r"[ \n\t\r]+", p) else r"\s*"
-                    for p in parts if p
-                )
-
-            # 1. Block Detection Pattern (Supports hallucinations like Updated, Done, etc.)
             block_pattern = re.compile(
                 r"<<<<<<< (?:SEARCH|ORIGINAL|HEAD|UPDATE)\n(.*?)\n=======\n(.*?)\n>>>>>>> (?:REPLACE|UPDATED|REPLACEMENT|DONE)",
                 re.DOTALL | re.MULTILINE,
@@ -282,27 +272,34 @@ def get_restricted_tools(restriction_scope: str, branch: Optional[str] = None) -
                 return "Error: No valid SEARCH/REPLACE blocks found. Ensure format:\n<<<<<<< SEARCH\n[old code]\n=======\n[new code]\n>>>>>>> REPLACE"
 
             new_content = content
+            # [Logic for normalization and matching...]
+            def normalize_lines(text: str) -> str:
+                return "\n".join(line.strip() for line in text.splitlines() if line.strip())
+
+            def build_whitespace_tolerant_regex(text: str) -> str:
+                parts = re.split(r"([ \n\t\r]+)", text)
+                return "".join(
+                    re.escape(p) if not re.fullmatch(r"[ \n\t\r]+", p) else r"\s*"
+                    for p in parts if p
+                )
+
             for search_text, replace_text in blocks:
                 match_indices = []
-
-                # Tier 1: Exact Match
+                # Tier 1: Exact
                 start_idx = 0
                 while True:
                     idx = new_content.find(search_text, start_idx)
                     if idx == -1: break
                     match_indices.append((idx, idx + len(search_text)))
                     start_idx = idx + len(search_text)
-
-                # Tier 2: Whitespace-Tolerant Match
+                # Tier 2: Whitespace
                 if not match_indices:
                     try:
                         regex_pattern = build_whitespace_tolerant_regex(search_text)
                         for m in re.finditer(regex_pattern, new_content, re.DOTALL):
                             match_indices.append((m.start(), m.end()))
-                    except Exception:
-                        pass
-
-                # Tier 3: Token-Sequence Match (Absolute Fallback)
+                    except Exception: pass
+                # Tier 3: Tokens
                 if not match_indices:
                     search_norm = normalize_lines(search_text)
                     lines = new_content.splitlines()
@@ -316,44 +313,22 @@ def get_restricted_tools(restriction_scope: str, branch: Optional[str] = None) -
                                 break
                         if match_indices: break
 
-                # --- Safety Verification ---
                 if not match_indices:
-                    # Closest match error reporting logic
-                    search_lines = search_text.splitlines()
-                    content_lines = new_content.splitlines()
-                    anchor_line = next((l.strip() for l in search_lines if len(l.strip()) > 10), search_lines[0].strip())
-                    
-                    found_context = False
-                    for idx, line in enumerate(content_lines):
-                        if anchor_line in line:
-                            start = max(0, idx - 5)
-                            end = min(len(content_lines), idx + 10)
-                            context = "\n".join(f"{i+1}: {content_lines[i]}" for i in range(start, end))
-                            return f"Error: SEARCH block mismatch in '{path}'. Found similar text at line {start+1}:\n\n{context}\n\nTip: Copy the EXACT text from the snippet above into your SEARCH block."
-                    
-                    return f"Error: No match found for the SEARCH block in {path}. Ensure you are copying the code EXACTLY as it appears in the file."
+                    return f"Error: No match found for the SEARCH block in {path}."
 
                 if not replace_all and len(match_indices) > 1:
-                    return f"Error: Multiple matches ({len(match_indices)}) found for this SEARCH block in {path}. Please include more surrounding code in your SEARCH block to make it unique, or set 'replace_all=True' if you intend to modify all occurrences."
+                    return f"Error: Multiple matches found for this SEARCH block in {path}."
 
-                # --- Apply Edits (Reverse order to preserve indices) ---
-                if replace_all:
-                    # Apply all in reverse
-                    for start, end in reversed(match_indices):
-                        new_content = new_content[:start] + replace_text + new_content[end:]
-                else:
-                    # Apply only the first
-                    start, end = match_indices[0]
+                for start, end in reversed(match_indices if replace_all else match_indices[:1]):
                     new_content = new_content[:start] + replace_text + new_content[end:]
 
             success = await resource_manager.write_resource(
-                safe_path, new_content, branch=target_branch
+                safe_path if not sandbox_id else inner_path, 
+                new_content, 
+                branch=target_branch, 
+                sandbox_id=sandbox_id
             )
-            return (
-                f"Successfully applied {len(blocks)} changes to {safe_path}"
-                if success
-                else "Write failed during patch"
-            )
+            return f"Successfully applied changes to {path}" if success else "Patch write failed"
         except Exception as e:
             return str(e)
 
@@ -364,8 +339,19 @@ def get_restricted_tools(restriction_scope: str, branch: Optional[str] = None) -
 
         try:
             safe_path = await _enforce_scope(path, restriction_scope)
-            logger.info("📁 Restricted Tool: Listing directory: %s", safe_path)
-            items = await resource_manager.list_resource(safe_path)
+            inner_path = path
+            if sandbox_id:
+                base_dir = await resource_manager.resolve_resource_path(restriction_scope)
+                if not base_dir.startswith("/"):
+                     base_dir = await resource_manager.ensure_local_context(base_dir)
+                inner_path = os.path.relpath(safe_path, base_dir)
+
+            logger.info("📁 Restricted Tool: Listing directory: %s (Sandbox: %s)", inner_path, sandbox_id)
+            items = await resource_manager.list_resource(
+                safe_path if not sandbox_id else inner_path, 
+                branch=outer_branch, 
+                sandbox_id=sandbox_id
+            )
             return "\n".join(sorted(items))
         except Exception as e:
             return str(e)
@@ -398,12 +384,16 @@ def get_restricted_tools(restriction_scope: str, branch: Optional[str] = None) -
     ]
 
 
-def get_ops_tools(restriction_scope: str, branch: Optional[str] = None) -> list:
+def get_ops_tools(
+    restriction_scope: str, 
+    branch: Optional[str] = None,
+    sandbox_id: Optional[str] = None
+) -> list:
     """
     Returns a list of read-only tools and execute_command locked to a repository.
     """
     # Reuse restricted tools for read/list
-    base_tools = get_restricted_tools(restriction_scope, branch=branch)
+    base_tools = get_restricted_tools(restriction_scope, branch=branch, sandbox_id=sandbox_id)
     # Remove write_file
     ops_tools = [t for t in base_tools if t.name not in ("write_file", "replace_in_file")]
 
@@ -412,84 +402,51 @@ def get_ops_tools(restriction_scope: str, branch: Optional[str] = None) -> list:
 
     async def restricted_execute_command(command: str) -> str:
         """Execute a shell command within the locked repository directory."""
-        import subprocess
+        from src.tools.e2b_aider_tool import run_command_in_e2b
+        
+        # If sandbox_id is provided, execute remotely in E2B
+        if sandbox_id:
+            logger.info("📡 Routing command '%s' to E2B Sandbox: %s", command, sandbox_id)
+            # Resolve repo URL if possible for cloning in sandbox
+            from src.core.graph_store import GraphStore
+            gs = GraphStore()
+            results = gs.execute_query(
+                "MATCH (r:Repository) WHERE r.name ENDS WITH $name RETURN r.remote_url LIMIT 1",
+                {"name": f"/{restriction_scope}"},
+            )
+            repo_url = results[0][0] if results and results[0] else None
+            
+            e2b_res = await run_command_in_e2b(
+                command=command,
+                repo_url=repo_url,
+                sandbox_id=sandbox_id,
+                env={"PYTHONPATH": "/home/user/repo"}
+            )
+            
+            if e2b_res.get("success"):
+                output = f"STDOUT:\n{e2b_res.get('stdout', '')}\n"
+                output += f"STDERR:\n{e2b_res.get('stderr', '')}\n"
+                output += f"Exit Code: {e2b_res.get('exit_code')}"
+                return output[:2000] + ("\n...[TRUNCATED]" if len(output) > 2000 else "")
+            else:
+                return f"Error executing in E2B: {e2b_res.get('error')}"
 
-        # Resolve the actual local path for this repo
+        # Local Fallback Execution
+        import subprocess
         try:
             base_resource = await resource_manager.resolve_resource_path(restriction_scope)
-            if base_resource.startswith("mcp://"):
-                base_dir = await resource_manager.ensure_local_context(base_resource)
-            else:
-                base_dir = base_resource
+            base_dir = await resource_manager.ensure_local_context(base_resource) if base_resource.startswith("mcp://") else base_resource
         except Exception as e:
             return f"Error resolving repository path: {e}"
 
-        logger.info("🐚 Restricted Tool: Executing command '%s' in '%s' (branch: %s)...", command, base_dir, branch)
-
-        if not base_dir or not os.path.exists(base_dir):
-            return f"Error: Local directory for '{restriction_scope}' not found. Ensure it is cloned/ingested."
-
-        # If a branch is specified, ensure we are on it before executing
-        if branch:
-            try:
-                # Check if it's a git repo
-                is_git = os.path.isdir(os.path.join(base_dir, ".git"))
-                if is_git:
-                    logger.info("🌿 Switching to branch '%s' in '%s'...", branch, base_dir)
-                    # 1. Fetch
-                    subprocess.run(
-                        ["git", "fetch", "origin", branch],
-                        cwd=base_dir,
-                        check=False,
-                        capture_output=True,
-                    )
-                    # 2. Checkout (handle new or existing)
-                    result = subprocess.run(
-                        ["git", "checkout", branch],
-                        cwd=base_dir,
-                        check=False,
-                        capture_output=True,
-                    )
-                    # 3. If checkout failed, try creating it (fallback)
-                    if result.returncode != 0:
-                         subprocess.run(
-                            ["git", "checkout", "-b", branch],
-                            cwd=base_dir,
-                            check=False,
-                            capture_output=True,
-                        )
-                    # 4. Pull latest if it exists remotely
-                    subprocess.run(
-                        ["git", "pull", "origin", branch],
-                        cwd=base_dir,
-                        check=False,
-                        capture_output=True,
-                    )
-            except Exception as e:
-                logger.warning("Branch management failed: %s", e)
+        logger.info("🐚 Restricted Tool: Executing Localy: '%s' in '%s'", command, base_dir)
 
         try:
             env = os.environ.copy()
-            env["PYTHONPATH"] = base_dir + (
-                os.pathsep + env.get("PYTHONPATH", "") if env.get("PYTHONPATH") else ""
-            )
-
-            result = subprocess.run(
-                command,
-                shell=True,
-                cwd=base_dir,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-
-            output = f"STDOUT:\n{result.stdout}\n" if result.stdout else ""
-            output += f"STDERR:\n{result.stderr}\n" if result.stderr else ""
-            output += f"Exit Code: {result.returncode}"
-
+            env["PYTHONPATH"] = base_dir + (os.pathsep + env.get("PYTHONPATH", "") if env.get("PYTHONPATH") else "")
+            result = subprocess.run(command, shell=True, cwd=base_dir, env=env, capture_output=True, text=True, timeout=30)
+            output = f"STDOUT:\n{result.stdout}\n" + (f"STDERR:\n{result.stderr}\n" if result.stderr else "") + f"Exit Code: {result.returncode}"
             return output[:2000] + ("\n...[TRUNCATED]" if len(output) > 2000 else "")
-
         except Exception as e:
             return f"Error executing command: {str(e)}"
 

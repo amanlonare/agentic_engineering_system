@@ -16,6 +16,7 @@ from src.core.state import EngineeringState
 from src.core.graph_store import GraphStore
 from src.schemas import StepExecutionRecord, StepStatus
 from src.tools.e2b_aider_tool import run_aider_in_e2b
+from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.utils.logger import configure_logging
 
 logger = configure_logging("coder")
@@ -32,7 +33,14 @@ async def _get_repo_url(repo_name: str) -> str:
     )
     if results and results[0] and results[0][0]:
         return results[0][0]
-    return f"https://github.com/{repo_name}" # Fallback guess
+    
+    # Fallback logic: if it looks like a full repo name (owner/repo), use it.
+    # Otherwise, log a warning and use the base github URL.
+    candidate = repo_name
+    if "/" not in candidate:
+        logger.warning("⚠️ Partial repo name '%s' passed. No owner found. Guessing...", repo_name)
+    
+    return f"https://github.com/{candidate}" # Guessing the full path
 
 async def coder_node(state: EngineeringState, config: RunnableConfig) -> Dict[str, Any]:
     """
@@ -78,8 +86,13 @@ async def coder_node(state: EngineeringState, config: RunnableConfig) -> Dict[st
     branch_name = state.branch_name
     
     # 4. Run Aider in E2B
-    logger.info("🧪 Spawning E2B sandbox to implement %s in %s", current_step.id, repo_name)
+    action = "Connecting to" if state.sandbox_id else "Initializing"
+    logger.info("\U0001f9ea %s E2B sandbox to implement %s in %s", action, current_step.id, repo_name)
     
+    # Resolve persona
+    persona = load_agent_persona("coder")
+    system_prompt = build_system_prompt(persona)
+
     # Resolve model from config with multiple fallbacks
     coder_cfg = app_config.llm.agents.get("coder")
     coder_model = getattr(coder_cfg, "model", None) if coder_cfg else None
@@ -90,9 +103,10 @@ async def coder_node(state: EngineeringState, config: RunnableConfig) -> Dict[st
         instructions=instructions,
         fnames=[], # Aider will discover files automatically
         branch=branch_name,
-        base_branch=app_config.system.default_branch,
-        model=coder_model,
-        sandbox_id=state.sandbox_id
+        base_branch=app_config.system.default_branch or "main",
+        model=coder_model or "gpt-4o",
+        sandbox_id=state.sandbox_id,
+        system_prompt=system_prompt
     )
     
     # Update sandbox ID in state if it's new

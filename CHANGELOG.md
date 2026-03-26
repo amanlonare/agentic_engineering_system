@@ -1,5 +1,24 @@
 # Changelog
 
+## [2026-03-25]
+
+### Summary of Persona-Driven Architecture & Verification Hardening
+Successfully modernized the agentic execution environment by transitioning to a **git-native, persona-driven Aider model**. This update eliminates fragile MCP tool-calling hallucinations by delegating file operations to Aider's native engine. Implemented a **Strict Verification Gate** in the Supervisor to ensure that all Coder-led reworks are finalized and signed off by the Ops agent before step completion.
+
+### Added
+- **Re-Verification Guard**: Implemented logic in `src/core/supervisor.py` that forces a routing back-pass to the Ops agent after any Coder rework, ensuring that "Success" is only granted by the verification specialist.
+- **Language-Agnostic Stack Detection**: Hardened the system to support Python, JS, Go, Rust, and Terraform with automated execution context detection.
+- **Three-Strike Diagnostic Loop**: Standardized the Ops agent's ability to perform deep environmental diagnostics in E2B sandboxes using language-idiomatic verification scripts.
+
+### Modified
+- **Persona Hardening**: Completely refactored `src/agents/coder.yaml` and `src/agents/ops.yaml` to be git-native and removed all "Allowed Tools" metadata to prevent hallucinated tool calls in source code.
+- **Config Loader Update**: Refactored `src/core/config_loader.py` to suppress the injection of tool lists into system prompts, supporting the "Identity-Only" prompt strategy.
+- **Supervisor Routing**: Updated the deterministic step resolver to check `execution_history` for agent-specific sign-offs.
+
+### Fixed
+- **Tool-Call Hallucinations**: Resolved critical issues where the Coder agent would attempt to write meta-instructions (bash commands, tool calls) into implementation files.
+- **Premature Step Completion**: Fixed a bug where successful Coder reworks would bypass final Ops validation.
+
 ## [2026-03-23]
 
 ### Summary of System Reliability & Multi-Repo Robustness

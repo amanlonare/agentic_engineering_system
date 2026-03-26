@@ -110,6 +110,10 @@ class EngineeringState(BaseModel):
         default=False,
         description="Flag set by Supervisor when a step needs correction after failure.",
     )
+    is_env_rework: bool = Field(
+        default=False,
+        description="Flag set by Supervisor when the failure is environment/dependency related.",
+    )
     rework_count: int = Field(
         default=0,
         description="Number of times the current active_step_id has been attempted.",

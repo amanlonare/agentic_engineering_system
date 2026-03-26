@@ -4,10 +4,16 @@ import subprocess
 from pathlib import Path
 from typing import List, Optional
 
+from e2b import Sandbox
 from src.core.config_manager import app_config
 from src.core.mcp_client import MCPClientManager
 
 logger = logging.getLogger(__name__)
+
+# Re-use Sandbox logic from tools or define here for resilience
+async def _get_sb(sandbox_id: str) -> Sandbox:
+    from src.core.config import settings
+    return Sandbox.connect(sandbox_id, api_key=settings.E2B_API_KEY)
 
 
 class ResourceManager:
@@ -87,8 +93,20 @@ class ResourceManager:
         base_uri = f"{self.PROTOCOL_PREFIX}github/{repo_name}"
         return f"{base_uri}/{relative_path}" if relative_path else base_uri
 
-    async def read_resource(self, uri: str, branch: Optional[str] = None) -> str:
-        """Reads content from a resource URI (local file or MCP)."""
+    async def read_resource(self, uri: str, branch: Optional[str] = None, sandbox_id: Optional[str] = None) -> str:
+        """Reads content from a resource URI (local file, MCP, or E2B Sandbox)."""
+        if sandbox_id:
+            try:
+                sb = await _get_sb(sandbox_id)
+                # Translate URI or path to sandbox path
+                # Standard sandbox path: /home/user/repo/[rel_path]
+                clean_path = uri.split("/")[-1] if uri.startswith(self.PROTOCOL_PREFIX) else uri
+                sandbox_path = f"/home/user/repo/{clean_path}" if not clean_path.startswith("/") else clean_path
+                logger.info("📦 Sandbox Tool: Reading file from E2B: %s", sandbox_path)
+                return sb.files.read(sandbox_path)
+            except Exception as e:
+                logger.warning("Sandbox read failed, falling back: %s", e)
+
         if uri.startswith(self.PROTOCOL_PREFIX):
             try:
                 return await self._read_mcp(uri, branch=branch)
@@ -112,8 +130,20 @@ class ResourceManager:
             return path.read_text(encoding="utf-8")
         raise FileNotFoundError(f"Local resource not found: {uri}")
 
-    async def write_resource(self, uri: str, content: str, branch: Optional[str] = None) -> bool:
-        """Writes content to a resource URI (local file or MCP)."""
+    async def write_resource(self, uri: str, content: str, branch: Optional[str] = None, sandbox_id: Optional[str] = None) -> bool:
+        """Writes content to a resource URI (local file, MCP, or E2B Sandbox)."""
+        if sandbox_id:
+            try:
+                sb = await _get_sb(sandbox_id)
+                clean_path = uri.split("/")[-1] if uri.startswith(self.PROTOCOL_PREFIX) else uri
+                sandbox_path = f"/home/user/repo/{clean_path}" if not clean_path.startswith("/") else clean_path
+                logger.info("📦 Sandbox Tool: Writing file to E2B: %s", sandbox_path)
+                sb.files.write(sandbox_path, content)
+                return True
+            except Exception as e:
+                logger.warning("Sandbox write failed: %s", e)
+                return False
+
         if uri.startswith(self.PROTOCOL_PREFIX):
             try:
                 return await self._write_mcp(uri, content, branch=branch)
@@ -133,8 +163,23 @@ class ResourceManager:
             logger.error("Failed to write to local resource %s: %s", uri, e)
             return False
 
-    async def list_resource(self, uri: str, branch: Optional[str] = None) -> List[str]:
-        """Lists contents of a resource URI (local dir or MCP)."""
+    async def list_resource(self, uri: str, branch: Optional[str] = None, sandbox_id: Optional[str] = None) -> List[str]:
+        """Lists contents of a resource URI (local dir, MCP, or E2B Sandbox)."""
+        if sandbox_id:
+            try:
+                sb = await _get_sb(sandbox_id)
+                clean_path = uri.split("/")[-1] if uri.startswith(self.PROTOCOL_PREFIX) else uri
+                if clean_path == uri and uri not in ["", ".", "./"]: # Probably a full repo name
+                    sandbox_path = "/home/user/repo"
+                else:
+                    sandbox_path = f"/home/user/repo/{clean_path}" if not clean_path.startswith("/") else clean_path
+                
+                logger.info("📦 Sandbox Tool: Listing directory in E2B: %s", sandbox_path)
+                entries = sb.files.list(sandbox_path)
+                return [e.name + ("/" if e.type == "dir" else "") for e in entries]
+            except Exception as e:
+                logger.warning("Sandbox list failed: %s", e)
+
         if uri.startswith(self.PROTOCOL_PREFIX):
             try:
                 return await self._list_mcp(uri, branch=branch)
