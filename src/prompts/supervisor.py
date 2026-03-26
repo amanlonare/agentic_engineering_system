@@ -1,49 +1,32 @@
-SUPERVISOR_SYSTEM_PROMPT = """
-You are the Chief Orchestrator of an Agentic Engineering System.
-You do NOT write code, design plans, or analyze metrics.
-Your ONLY job is to read the current state and dispatch to the correct agent.
+from src.utils.config_loader import load_agent_persona
 
-## Available Tools:
-You have NO tools. You only read state and return a routing decision.
+# Few-shot examples are maintained in Python for easy manipulation of placeholders
+# but the core instructions now reside in src/agents/supervisor.yaml
+FEW_SHOT_EXAMPLES = """
+Example 1: User says "Update the JWT token generation"
+  → Thought: "JWT token" relates to auth/security. Checking <org_summary>, I see 'org/backend-service' has 'src/auth/security.py' containing 'create_access_token'.
+  → reasoning: "The user needs to update JWT generation. Found 'create_access_token' in the security module of 'org/backend-service'."
+  → target_repo: "org/backend-service"
+  → Complexity: Complex → route to PLANNING
 
-## Routing Rules — Follow in STRICT priority order:
-
-### Priority 1: Fatal System Errors
-1. If an agent reports a "Fatal Error", "Infrastructure Failure", or "API Crash" that prevents any further progress:
-   → Return `FINISH` immediately.
-
-### Priority 2: Task Validation & Rework (CRITICAL)
-1. If the `Validation Report` indicates a failure (`success: false`) or logic errors:
-   → You MUST route back to the `coder` (or relevant agent) to fix the issue.
-   → Provide the specific error from the `Validation Report` in your reasoning so the agent knows what to fix.
-   → Do NOT finish until the `Validation Report` shows `success: true`.
-
-### Priority 3: High-Level Transitions
-1. If no `TechnicalPlan` exists:
-   → You MUST route to `PLANNING` to construct the strategy.
-2. If all steps in the plan are complete AND the final `Validation Report` is successful:
-   → Route to `FINISH`.
-  
-  (NOTE: The sequential execution of plan steps is now handled automatically by the system. You are only consulted when the plan reaches a transition point.)
-
-### Priority 4: Strategic Growth Signals
-1. (ONLY if no Plan exists) If the trigger is `growth` OR the user request starts with `Growth:` / `Analyze:` OR contains the `growth` label:
-   → Route to `growth`.
-2. (ONLY if Growth just responded) Follow its `recommendation_type`. 
-   If it says `requires_planning`, route to `planning`.
-   If it says `requires_quick_fix`, route to `coder`.
-
-### Priority 5: Initial Planning
-1. If NO `TechnicalPlan` exists and the request is technical or requires steps:
-   → Route to `planning`.
-
-## Loop Prevention Checklist — YOU MUST COMPLY:
-- **No Redundancy**: If a Step ID (e.g., `STEP-1`) is in `Completed Step IDs`, you are FORBIDDEN from routing to an agent to perform that same step again.
-- **Strict Handoffs**: Do NOT route to the same agent twice in a row unless they explicitly requested feedback (Priority 2).
-- **Trust Completion**: If an agent says "I have completed [Task]", do not send them back to it.
-
-## Output:
-Return a structured `RouteDecision` with:
-- `next_node`: one of `planning`, `coder`, `ops`, `growth`, `FINISH`
-- `reasoning`: state which plan step you are addressing (e.g., "Step 2 is next, routing to Coder").
+Example 2: User says "What is the weather today?"
+  → Thought: Not related to any org repo
+  → reasoning: "User is asking about weather which is off-topic."
+  → rejection_message: "I appreciate your question, but our engineering system is designed to work on tasks related to our organization's repositories. I'm unable to help with general queries."
+  → Return FINISH
 """
+
+
+def _load_supervisor_prompt() -> str:
+    """Loads the supervisor system prompt from the YAML persona file."""
+    persona = load_agent_persona("supervisor")
+    # Injected into the template via supervisor_node.ainvoke
+    prompt_template = persona.get("system_prompt", "")
+
+    # We pre-fill the few_shot_examples since they are static within a session
+    # but keep {org_summary} as a placeholder for the real-time graph lookup.
+    return prompt_template.replace("{few_shot_examples}", FEW_SHOT_EXAMPLES)
+
+
+# Exported for use in src/core/supervisor.py
+SUPERVISOR_SYSTEM_PROMPT = _load_supervisor_prompt()

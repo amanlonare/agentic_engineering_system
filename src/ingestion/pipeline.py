@@ -97,13 +97,46 @@ class IngestionPipeline:
         identified_source = self.identifier.identify(source_url)
         if not identified_source.is_verified:
             raise PermissionError(
-                f"Cannot verify access to source: {source_url}. Check tokens/credentials."
+                f"Cannot verify access to source: {source_url}. "
+                "Check tokens/credentials."
             )
 
         # Step 2: Fetch
         raw_content = await self.fetcher.fetch(identified_source)
 
         # Step 3: Chunk
+        repo_name = "Other Sources"  # Default fallback
+        repo_type = "Unknown"
+
+        if identified_source.source_type == SourceType.GITHUB_REPO:
+            repo_type = "GitHub"
+            from urllib.parse import urlparse
+
+            parsed = urlparse(identified_source.identifier)
+            parts = parsed.path.strip("/").split("/")
+            if len(parts) >= 2:
+                repo_name = f"{parts[0]}/{parts[1]}"
+                if repo_name.endswith(".git"):
+                    repo_name = repo_name[:-4]
+        elif identified_source.source_type == SourceType.LOCAL_DIR:
+            repo_type = "Local"
+            repo_name = Path(identified_source.identifier).name
+        elif identified_source.source_type == SourceType.GOOGLE_DOC:
+            repo_type = "Google Drive"
+            title = "Unknown Google Doc"
+            if isinstance(raw_content, dict):
+                title = raw_content.get("title", "Unknown Google Doc")
+            repo_name = f"[GDoc] {title}"
+        elif identified_source.source_type == SourceType.GOOGLE_SHEET:
+            repo_type = "Google Drive"
+            title = "Unknown Google Sheet"
+            if isinstance(raw_content, dict):
+                # Sheets API has title inside properties
+                title = raw_content.get("properties", {}).get(
+                    "title", "Unknown Google Sheet"
+                )
+            repo_name = f"[GSheet] {title}"
+
         if identified_source.source_type in [
             SourceType.GITHUB_REPO,
             SourceType.LOCAL_DIR,
@@ -143,6 +176,11 @@ class IngestionPipeline:
                         source_id=file_data["url"],
                         chunk_format=engine_format,
                     )
+
+                    if repo_name:
+                        for c in file_chunks:
+                            c.metadata.custom_attributes["repo_name"] = repo_name
+
                     chunks.extend(file_chunks)
                 except Exception as e:
                     print(f"DEBUG: Failed to chunk {file_data['path']}: {e}")
@@ -151,13 +189,17 @@ class IngestionPipeline:
             engine_format = self._map_source_to_engine(identified_source.source_type)
             # Pass the identified source identifier (URL/path) as the source_id
             chunks = self.chunker.chunk(
-                raw_content,
+                content=raw_content,
                 source_id=identified_source.identifier,
                 chunk_format=engine_format,
             )
 
         # Step 4: Index into Graph and Vector DB
         self.graph_store.upsert_source(identified_source)
+        if repo_name:
+            self.graph_store.upsert_repository(
+                repo_name, identified_source.identifier, repo_type
+            )
         self.graph_store.upsert_chunks(identified_source, chunks)
         self.vector_store.upsert_chunks(chunks)
 

@@ -1,6 +1,4 @@
 class Calculator:
-    """A simple calculator class."""
-
     def add(self, a, b):
         return a + b
 
@@ -8,5 +6,5 @@ class Calculator:
         return a - b
 
 
-def power(base, exponent):
-    return base**exponent
+def power(a, b):
+    return a**b

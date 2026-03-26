@@ -1,5 +1,75 @@
 # Changelog
 
+## [2026-03-25]
+
+### Summary of Persona-Driven Architecture & Verification Hardening
+Successfully modernized the agentic execution environment by transitioning to a **git-native, persona-driven Aider model**. This update eliminates fragile MCP tool-calling hallucinations by delegating file operations to Aider's native engine. Implemented a **Strict Verification Gate** in the Supervisor to ensure that all Coder-led reworks are finalized and signed off by the Ops agent before step completion.
+
+### Added
+- **Re-Verification Guard**: Implemented logic in `src/core/supervisor.py` that forces a routing back-pass to the Ops agent after any Coder rework, ensuring that "Success" is only granted by the verification specialist.
+- **Language-Agnostic Stack Detection**: Hardened the system to support Python, JS, Go, Rust, and Terraform with automated execution context detection.
+- **Three-Strike Diagnostic Loop**: Standardized the Ops agent's ability to perform deep environmental diagnostics in E2B sandboxes using language-idiomatic verification scripts.
+
+### Modified
+- **Persona Hardening**: Completely refactored `src/agents/coder.yaml` and `src/agents/ops.yaml` to be git-native and removed all "Allowed Tools" metadata to prevent hallucinated tool calls in source code.
+- **Config Loader Update**: Refactored `src/core/config_loader.py` to suppress the injection of tool lists into system prompts, supporting the "Identity-Only" prompt strategy.
+- **Supervisor Routing**: Updated the deterministic step resolver to check `execution_history` for agent-specific sign-offs.
+
+### Fixed
+- **Tool-Call Hallucinations**: Resolved critical issues where the Coder agent would attempt to write meta-instructions (bash commands, tool calls) into implementation files.
+- **Premature Step Completion**: Fixed a bug where successful Coder reworks would bypass final Ops validation.
+
+## [2026-03-23]
+
+### Summary of System Reliability & Multi-Repo Robustness
+Successfully implemented a robust file-patching system and dynamic branch resolution engine. These updates eliminate "SEARCH/REPLACE" mismatch errors caused by LLM hallucinations and ensure compatibility across repositories using `main`, `master`, or custom default branches. Hardened security by blocking direct commits to critical branches and improved observability through refined logging and exception handling.
+
+### Added
+- **Dynamic Branch Resolution**: Implemented `_get_default_branch` in `src/tools/github.py` to query the GitHub API, allowing PRs and branches to target the correct repository-specific default branch automatically.
+- **Fuzzy Patching Fallback**: Added a normalization layer to `restricted_replace_in_file` in `src/tools/codebase_tools.py` that ignores superficial whitespace/indentation differences when applying diffs.
+- **Flexible Tag Support**: Updated the patching regex to support common LLM hallucinations like `>>>>>>> UPDATED`, `>>>>>>> DONE`, and `>>>>>>> REPLACEMENT`.
+
+### Modified
+- **Coder Instruction Set**: Updated `src/agents/coder.yaml` with strict "Single Block Constraints" and unified SEARCH/REPLACE formatting rules.
+- **Auto-Connect Logic**: Integrated `_ensure_mcp_connection` across all GitHub tools to prevent mid-task disconnection errors.
+- **Security Hardening**: Updated `src/core/resource_manager.py` to strictly block direct `create_or_update` operations on `main` or `master` branches, enforcing feature-branch-only workflows.
+
+### Fixed
+- **ContextVar Cleanup Errors**: Suppressed noisy `ValueError` and `LookupError` during async session cleanup in `src/core/mcp_client.py`.
+- **Linting & Stability**: Resolved over a dozen Pydantic, Pylint, and Pyright warnings across the `tools/` and `core/` layers, including f-string vs lazy logging consistency.
+- **PR Base Target**: Fixed a bug where `create_pull_request` defaulted to `main`, causing validation failures on older `master`-based repositories.
+
+## [2026-03-19]
+
+### Summary of Traceability & Resource Resilience
+Successfully resolved initialization errors in **Langfuse Tracing** and hardened the **ResourceManager** to prevent "AttributeError" and "Unexpected keyword" crashes during task cleanup. Refined the **CLI interactive loop** to ensure seamless handoffs between the Supervisor and Planning nodes.
+
+### Modified
+- **Tracing Initialization**: Updated `src/core/tracing.py` to use environment variables for `secret_key` and `host`, resolving constructor signature mismatches.
+- **Main Execution Loop**: Fixed `main.py` to propagate `thread_id` and `user_id` via LangChain metadata for accurate trace attribution.
+- **Ops Node Stability**: Corrected the `ResourceManager` cleanup logic in `src/nodes/ops.py` to properly await the `cleanup()` method.
+
+## [2026-03-19]
+
+### Summary of Agentic Architecture Overhaul & Tracing Integration
+Implemented a major architectural upgrade to the core orchestration layer. Introduced **Langfuse Tracing** for deep observability across the agentic graph and the **ResourceManager** for managing ephemeral GitHub/GDrive contexts. Standardized all agent nodes (`planning`, `coder`, `ops`, `growth`) to use native `RunnableConfig` for tracing and metadata propagation.
+
+### Added
+- **Langfuse Observability**: Deployed `src/core/tracing.py` and integrated `CallbackHandler` across all LLM and tool-calling boundaries.
+- **Unified Resource Manager**: Introduced `src/core/resource_manager.py` to handle remote file access, smart context discovery, and automated workspace cleanup.
+- **Ingestion Pipeline**: Deployed `src/core/ingestion.py` to consolidate repository analysis and semantic indexing.
+- **Google Drive Tooling**: Added `src/tools/gdrive.py` for direct document operations through MCP.
+- **Task Cleanup Node**: Introduced `src/nodes/cleanup.py` to systematically prune transient stores and workspaces after completion.
+
+### Modified
+- **Orchestration Nodes**: Fully refactored `src/nodes/` to pass `config` through all `ainvoke` and tool calls.
+- **State Schema Expansion**: Updated `EngineeringState` with `branch_name`, `is_lightweight`, and `active_step_id` for deterministic execution tracking.
+- **Supervisor Workflow**: Overhauled `supervisor.yaml` and `supervisor.py` for plan-driven multi-step orchestration.
+
+### Fixed
+- **Search/Replace Block Hallucination**: Hardened the `coder.yaml` instructions to prioritize exact whitespace matches and first-occurrence patches.
+- **Import Path Consistency**: Resolved lingering `ModuleNotFoundError` issues by enforcing absolute imports across the entire `src/` directory.
+
 ## [2026-03-16]
 
 ### Summary of MCP Expansion & RAG Optimization

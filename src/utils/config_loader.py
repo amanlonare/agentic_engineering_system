@@ -34,18 +34,12 @@ def build_system_prompt(persona: Dict[str, Any]) -> str:
     if "system_prompt" in persona:
         return persona["system_prompt"]
 
-    # Legacy fallback: construct from structured fields
+    # Behavioral persona: Focus on Role and Identity
     prompt = f"Identity: {persona.get('name', 'Assistant')}\n"
     prompt += f"Role: {persona.get('description', '')}\n\n"
 
-    tools = persona.get("allowed_tools", [])
-    if tools:
-        prompt += f"ALLOWED TOOLS: {', '.join(tools)}\n"
-
-    forbidden = persona.get("forbidden_actions", [])
-    if forbidden:
-        prompt += "\nSTRICT LIMITATIONS (DO NOT EXCEED):\n"
-        for item in forbidden:
-            prompt += f"- {item}\n"
+    # We omit 'allowed_tools' and 'forbidden_actions' here because they
+    # often confuse Aider into writing tool calls into the code files.
+    # The persona yaml should use the 'system_prompt' field for specific behavioral rules.
 
     return prompt

@@ -1,18 +1,24 @@
-from src.core.workspace import WorkspaceManager
-from src.utils.logger import configure_logging
+import asyncio
 
-logger = configure_logging()
+from src.core.config import settings
+from src.ingestion.pipeline import IngestionPipeline
 
 
-def ingest():
-    """
-    Ingests all README files from the .context directory into ChromaDB.
-    """
-    logger.info("🎬 Starting workspace context ingestion...")
-    wm = WorkspaceManager()
-    wm.index_repositories()
-    logger.info("✅ Ingestion complete.")
+async def main():
+    pipeline = IngestionPipeline()
+    sources = IngestionPipeline.load_sources_from_yaml(settings.INGESTION_SOURCES_FILE)
+
+    print(f"Loaded {len(sources)} sources from config.")
+    for source in sources:
+        print(f"Processing: {source}")
+        try:
+            chunks = await pipeline.process(source)
+            print(f"Successfully indexed {len(chunks)} chunks for {source}\n")
+        except Exception as e:
+            print(f"Failed to process {source}: {e}\n")
+
+    await pipeline.close()
 
 
 if __name__ == "__main__":
-    ingest()
+    asyncio.run(main())

@@ -2,7 +2,7 @@
 Schemas for the Advanced Retrieval module.
 """
 
-from typing import List
+from typing import Annotated, List
 
 from pydantic import BaseModel, Field
 
@@ -26,9 +26,10 @@ class RetrievedContext(BaseModel):
     graph_depth: int = Field(
         0, description="0 = direct hit, 1+ = discovered via graph traversal."
     )
-    related_symbols: List[str] = Field(
-        default_factory=list, description="Symbols related via graph edges."
-    )
+    related_symbols: Annotated[
+        List[str],
+        Field(default_factory=list, description="Symbols related via graph edges."),
+    ] = []
 
 
 class RetrievalResult(BaseModel):

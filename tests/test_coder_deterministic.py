@@ -5,6 +5,7 @@ import shutil
 
 import pytest
 from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableConfig
 
 from src.core.state import EngineeringState
 from src.nodes.coder import coder_node
@@ -71,7 +72,7 @@ async def test_coder_deterministic():
             approval_status=ApprovalStatus.APPROVED,
         )
 
-        result_1 = await coder_node(state_1)
+        result_1 = await coder_node(state_1, config=RunnableConfig())
         print(f"Completed Steps: {result_1.get('completed_step_ids')}")
 
         world_txt = os.path.join(".context", "repo-a", "world.txt")
@@ -107,7 +108,7 @@ async def test_coder_deterministic():
             approval_status=ApprovalStatus.APPROVED,
         )
 
-        result_2 = await coder_node(state_2)
+        result_2 = await coder_node(state_2, config=RunnableConfig())
         final_msg = result_2["messages"][-1].content if result_2["messages"] else ""
         print(f"Agent Final Message Snippet: {final_msg[:100]}...")
 

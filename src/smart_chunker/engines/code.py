@@ -1,5 +1,5 @@
 import hashlib
-from typing import List
+from typing import Any, List
 
 from tree_sitter_languages import get_language, get_parser
 
@@ -20,7 +20,12 @@ class CodeEngine(BaseEngine):
         self.language = get_language(language_name)
         self.parser = get_parser(language_name)
 
-    def chunk(self, content: str, source_id: str, **_kwargs) -> List[Chunk]:
+    def chunk(
+        self, content: str | dict | Any, source_id: str, **_kwargs
+    ) -> List[Chunk]:
+        if not isinstance(content, str):
+            content = str(content)
+
         tree = self.parser.parse(bytes(content, "utf8"))
         root_node = tree.root_node
 
@@ -28,44 +33,79 @@ class CodeEngine(BaseEngine):
         # Query for classes and functions
         if self.language_name == "python":
             query_scm = """
-            (class_definition 
+            (class_definition
                 name: (identifier) @name
                 superclasses: (argument_list)? @inherits
             ) @class
-            (function_definition 
+            (function_definition
                 name: (identifier) @name
             ) @func
             """
         elif self.language_name == "java":
             query_scm = """
-            (class_declaration 
+            (class_declaration
                 name: (identifier) @name
             ) @class
-            (method_declaration 
+            (method_declaration
                 name: (identifier) @name
             ) @func
             """
         elif self.language_name == "kotlin":
             query_scm = """
-            (class_declaration 
+            (class_declaration
                 (type_identifier) @name
             ) @class
-            (function_declaration 
+            (function_declaration
                 (simple_identifier) @name
             ) @func
             """
-        elif self.language_name in ["javascript", "typescript", "tsx"]:
+        elif self.language_name == "javascript":
             query_scm = """
-            (class_declaration 
-                name: (type_identifier) @name
+            (class_declaration
+                name: (identifier) @name
             ) @class
-            (function_declaration 
+            (function_declaration
                 name: (identifier) @name
             ) @func
-            (method_definition 
+            (method_definition
                 name: (property_identifier) @name
             ) @func
-            (arrow_function) @func
+            (variable_declarator
+                name: (identifier) @name
+                value: (arrow_function)
+            ) @func
+            (variable_declarator
+                name: (identifier) @name
+                value: (function)
+            ) @func
+            (pair
+                key: (property_identifier) @name
+                value: (arrow_function)
+            ) @func
+            """
+        elif self.language_name in ["typescript", "tsx"]:
+            query_scm = """
+            (class_declaration
+                name: (type_identifier) @name
+            ) @class
+            (function_declaration
+                name: (identifier) @name
+            ) @func
+            (method_definition
+                name: (property_identifier) @name
+            ) @func
+            (variable_declarator
+                name: (identifier) @name
+                value: (arrow_function)
+            ) @func
+            (variable_declarator
+                name: (identifier) @name
+                value: (function)
+            ) @func
+            (pair
+                key: (property_identifier) @name
+                value: (arrow_function)
+            ) @func
             (interface_declaration
                 name: (type_identifier) @name
             ) @class
@@ -99,16 +139,26 @@ class CodeEngine(BaseEngine):
                     or node.child_by_field_name("identifier")
                     or node.child_by_field_name("property_identifier")
                 )
-                if not name_node and node.type in [
-                    "interface_declaration",
-                    "class_declaration",
-                ]:
-                    # Search for type_identifier in children
-                    for child in node.children:
-                        if child.type == "type_identifier":
-                            name_node = child
-                            break
+                if not name_node:
+                    # Specific for the variable_declarator/pair captures in JS/TS
+                    if node.type in ["variable_declarator", "pair"]:
+                        # The @name capture in the SCM query will be in the captures list
+                        # but here we are iterating over 'node' where tag is 'class' or 'func'.
+                        # For 'variable_declarator', the name is child with field 'name'.
+                        name_node = node.child_by_field_name(
+                            "name"
+                        ) or node.child_by_field_name("key")
+                    elif node.type in ["interface_declaration", "class_declaration"]:
+                        # Search for type_identifier in children
+                        for child in node.children:
+                            if child.type == "type_identifier":
+                                name_node = child
+                                break
+
                 symbol_name = self._get_node_text(name_node, content)
+                if not symbol_name and node.type == "arrow_function":
+                    # Fallback for old-style direct arrow captures if they persist
+                    symbol_name = "anonymous_arrow"
 
                 # Signature extraction
                 signature_end = content.find("\n", start_byte)
@@ -184,7 +234,7 @@ class CodeEngine(BaseEngine):
         max_chars: int,
         chunk_type: ChunkType,
     ) -> List[Chunk]:
-        """Splits a large chunk into smaller ones, prepending the signature for context."""
+        """Splits large chunks into smaller ones, prepending signature for context."""
         lines = content.split("\n")
         sub_chunks = []
         current_batch = [signature, "# ... (continued)"]
@@ -228,9 +278,7 @@ class CodeEngine(BaseEngine):
         return sub_chunks
 
     def _extract_dependencies(self, node, content: str, self_name: str) -> List[str]:
-        """
-        Extracts identifiers that look like dependencies (CamelCase or calls) within the node.
-        """
+        """Extracts identifiers that look like dependencies within the node."""
         if self.language_name == "python":
             query_scm = """
             (call function: (identifier) @call)

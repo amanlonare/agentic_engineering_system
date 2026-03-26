@@ -1,11 +1,11 @@
-# Documentation Test
-This is a test file for the Markdown engine.
+# Intro
+Welcome.
 
-## Section 1: Introduction
-Details about Section 1.
+## Section 1
+Content here.
 
-### Sub-section 1.1
-Specifics.
+### 1.1
+Subcontent.
 
-## Section 2: Advanced
-More details.
+## Section 2
+Final.

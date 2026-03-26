@@ -9,7 +9,7 @@ logger = configure_logging()
 class LongTermMemory:
     """
     Manages long-term semantic memory for the agents using the unified VectorStore.
-    Keeps legacy data in a separate collection to avoid collisions with the knowledge base.
+    Avoids collisions with the knowledge base by using a separate collection.
     """
 
     def __init__(

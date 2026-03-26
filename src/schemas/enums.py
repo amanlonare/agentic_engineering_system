@@ -18,6 +18,7 @@ class NodeName(str, Enum):
     CODER = "coder"
     OPS = "ops"
     GROWTH = "growth"
+    CLEANUP = "cleanup"
     FINISH = "FINISH"
 
 

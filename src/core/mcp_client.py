@@ -28,7 +28,7 @@ class MCPClientManager:
         """Connect to a remote MCP server via SSE."""
         logger.info(f"Connecting to SSE MCP server '{name}' at {url}")
         try:
-            # We use an ExitStack logically, but for simplicity in this manager we'll start the context
+            # We use an ExitStack to manage context for stdio/sse clients
             from contextlib import AsyncExitStack
 
             stack = AsyncExitStack()
@@ -77,7 +77,7 @@ class MCPClientManager:
             logger.info(f"Injected Google credentials from {key_path}")
 
         logger.info(
-            f"Connecting to Stdio MCP server '{name}' with command: {command} {' '.join(args)}"
+            f"Connecting to Stdio MCP '{name}' with command: {command} {' '.join(args)}"
         )
         try:
             from contextlib import AsyncExitStack
@@ -160,8 +160,15 @@ class MCPClientManager:
     async def disconnect_all(self):
         """Close all active sessions."""
         for name, stack in self.exit_stacks.items():
-            logger.info(f"Disconnecting MCP server '{name}'")
-            await stack.aclose()
+            try:
+                logger.info(f"Disconnecting MCP server '{name}'")
+                await stack.aclose()
+            except ValueError:
+                # Catch scope mismatch errors (ContextVar) during task-switching/cleanup
+                pass
+            except Exception as e:
+                # Catch other potential errors during cleanup
+                logger.warning(f"Note: Error during cleanup of {name}: {e}")
         self.sessions = {}
         self.exit_stacks = {}
         self._tools_cache = {}

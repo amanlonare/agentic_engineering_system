@@ -32,14 +32,20 @@ class ExecutionStep(BaseModel):
     assigned_to: str = Field(description="Agent responsible (e.g., 'coder')")
     target_repo: Optional[str] = Field(
         default=None,
-        description="The repository name involved in this step (e.g., 'mobile-app')",
+        description=(
+            "The full repository name involved in this step as provided in the context "
+            "(e.g., 'owner/repo'). DO NOT use subdirectory names."
+        ),
     )
     dependencies: List[str] = Field(
         default_factory=list, description="IDs of steps that must complete first"
     )
     verification_criteria: Optional[str] = Field(
         default=None,
-        description="Specific testing/validation details for this step (e.g., 'Run pytest and verify output')",
+        description=(
+            "Specific testing/validation details for this step "
+            "(e.g., 'Run pytest and verify output')"
+        ),
     )
 
 
@@ -55,5 +61,8 @@ class TechnicalPlan(BaseModel):
     )
     estimated_risk: str = Field(
         default="low", description="Risk assessment (low, medium, high)"
+    )
+    priority: str = Field(
+        default="medium", description="Task priority (low, medium, high, urgent)"
     )
     prd_link: Optional[str] = Field(default=None, description="Link to associated PRD")

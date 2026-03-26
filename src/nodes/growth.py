@@ -7,6 +7,7 @@ from langchain_core.messages import (
     SystemMessage,
     ToolMessage,
 )
+from langchain_core.runnables import RunnableConfig
 
 from src.core.config_manager import app_config, config_manager
 from src.core.state import EngineeringState
@@ -19,7 +20,9 @@ from src.utils.logger import configure_logging
 logger = configure_logging("growth")
 
 
-async def growth_node(state: EngineeringState) -> Dict[str, Any]:
+async def growth_node(
+    state: EngineeringState, config: RunnableConfig
+) -> Dict[str, Any]:
     """
     Growth Agent: Analyzes user metrics and proposes strategies.
     Uses LLM tool-calling to process mobility data.
@@ -39,7 +42,6 @@ async def growth_node(state: EngineeringState) -> Dict[str, Any]:
 
     persona = load_agent_persona("growth")
     system_prompt = build_system_prompt(persona)
-    # Inject repo context manually since build_system_prompt doesn't take it
     # Inject repo context manually since build_system_prompt doesn't take it
     system_prompt = f"{system_prompt}\n\nTarget Repository Context: {repo}"
 
@@ -63,7 +65,7 @@ async def growth_node(state: EngineeringState) -> Dict[str, Any]:
     MAX_TOOL_CALLS = agent_cfg.max_tool_calls if agent_cfg else 10
 
     for _ in range(MAX_TOOL_CALLS):
-        response = await llm_with_tools.ainvoke(messages)
+        response = await llm_with_tools.ainvoke(messages, config=config)
         messages.append(response)
 
         if not response.tool_calls:
@@ -102,7 +104,7 @@ async def growth_node(state: EngineeringState) -> Dict[str, Any]:
     ]
 
     # Cast/validate the result
-    recommendation_data = await analyzer_llm.ainvoke(analysis_input)
+    recommendation_data = await analyzer_llm.ainvoke(analysis_input, config=config)
     recommendation = cast(GrowthRecommendation, recommendation_data)
     if isinstance(recommendation_data, dict):
         recommendation = GrowthRecommendation(**recommendation_data)

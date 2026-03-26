@@ -86,9 +86,16 @@ Thumbs.db
 architecture/
 
 # Cloned target repositories (each has its own .git)
-.context/testing_agentic_engineering_team/
+.context/
 
 # dummy data
 tests/data/pdfs
 # Ingestion Sources (Sensitive)
 ingestion_sources.yaml
+
+# skills and plans
+.agent/
+.planning/
+
+# agent
+aider/
