@@ -5,14 +5,17 @@ from pathlib import Path
 from typing import List, Optional
 
 from e2b import Sandbox
+
 from src.core.config_manager import app_config
 from src.core.mcp_client import MCPClientManager
 
 logger = logging.getLogger(__name__)
 
+
 # Re-use Sandbox logic from tools or define here for resilience
 async def _get_sb(sandbox_id: str) -> Sandbox:
     from src.core.config import settings
+
     return Sandbox.connect(sandbox_id, api_key=settings.E2B_API_KEY)
 
 
@@ -43,30 +46,32 @@ class ResourceManager:
             return str(local_path)
 
         # Check if we need to resolve owner/repo from GraphStore
-        if (
-            repo_name
-            and repo_name != "Other Sources"
-            and not repo_name.startswith("[")
-        ):
+        if repo_name and repo_name != "Other Sources" and not repo_name.startswith("["):
             # If it already contains a slash, try exact match first. If no slash, do an ENDS WITH match.
             try:
                 from src.core.graph_store import GraphStore
 
                 gs = GraphStore()
                 results = None
-                
+
                 if "/" in repo_name:
                     results = gs.execute_query(
                         "MATCH (r:Repository {name: $name}) RETURN r.remote_url",
                         {"name": repo_name},
                     )
-                
+
                 if not results:
                     results = gs.execute_query(
                         "MATCH (r:Repository) WHERE r.name ENDS WITH $name RETURN r.remote_url LIMIT 1",
-                        {"name": repo_name if repo_name.startswith("/") else f"/{repo_name}"},
+                        {
+                            "name": (
+                                repo_name
+                                if repo_name.startswith("/")
+                                else f"/{repo_name}"
+                            )
+                        },
                     )
-                    
+
                 if results and results[0] and results[0][0]:
                     from urllib.parse import urlparse
 
@@ -93,15 +98,23 @@ class ResourceManager:
         base_uri = f"{self.PROTOCOL_PREFIX}github/{repo_name}"
         return f"{base_uri}/{relative_path}" if relative_path else base_uri
 
-    async def read_resource(self, uri: str, branch: Optional[str] = None, sandbox_id: Optional[str] = None) -> str:
+    async def read_resource(
+        self, uri: str, branch: Optional[str] = None, sandbox_id: Optional[str] = None
+    ) -> str:
         """Reads content from a resource URI (local file, MCP, or E2B Sandbox)."""
         if sandbox_id:
             try:
                 sb = await _get_sb(sandbox_id)
                 # Translate URI or path to sandbox path
                 # Standard sandbox path: /home/user/repo/[rel_path]
-                clean_path = uri.split("/")[-1] if uri.startswith(self.PROTOCOL_PREFIX) else uri
-                sandbox_path = f"/home/user/repo/{clean_path}" if not clean_path.startswith("/") else clean_path
+                clean_path = (
+                    uri.split("/")[-1] if uri.startswith(self.PROTOCOL_PREFIX) else uri
+                )
+                sandbox_path = (
+                    f"/home/user/repo/{clean_path}"
+                    if not clean_path.startswith("/")
+                    else clean_path
+                )
                 logger.info("📦 Sandbox Tool: Reading file from E2B: %s", sandbox_path)
                 return sb.files.read(sandbox_path)
             except Exception as e:
@@ -130,13 +143,25 @@ class ResourceManager:
             return path.read_text(encoding="utf-8")
         raise FileNotFoundError(f"Local resource not found: {uri}")
 
-    async def write_resource(self, uri: str, content: str, branch: Optional[str] = None, sandbox_id: Optional[str] = None) -> bool:
+    async def write_resource(
+        self,
+        uri: str,
+        content: str,
+        branch: Optional[str] = None,
+        sandbox_id: Optional[str] = None,
+    ) -> bool:
         """Writes content to a resource URI (local file, MCP, or E2B Sandbox)."""
         if sandbox_id:
             try:
                 sb = await _get_sb(sandbox_id)
-                clean_path = uri.split("/")[-1] if uri.startswith(self.PROTOCOL_PREFIX) else uri
-                sandbox_path = f"/home/user/repo/{clean_path}" if not clean_path.startswith("/") else clean_path
+                clean_path = (
+                    uri.split("/")[-1] if uri.startswith(self.PROTOCOL_PREFIX) else uri
+                )
+                sandbox_path = (
+                    f"/home/user/repo/{clean_path}"
+                    if not clean_path.startswith("/")
+                    else clean_path
+                )
                 logger.info("📦 Sandbox Tool: Writing file to E2B: %s", sandbox_path)
                 sb.files.write(sandbox_path, content)
                 return True
@@ -163,18 +188,32 @@ class ResourceManager:
             logger.error("Failed to write to local resource %s: %s", uri, e)
             return False
 
-    async def list_resource(self, uri: str, branch: Optional[str] = None, sandbox_id: Optional[str] = None) -> List[str]:
+    async def list_resource(
+        self, uri: str, branch: Optional[str] = None, sandbox_id: Optional[str] = None
+    ) -> List[str]:
         """Lists contents of a resource URI (local dir, MCP, or E2B Sandbox)."""
         if sandbox_id:
             try:
                 sb = await _get_sb(sandbox_id)
-                clean_path = uri.split("/")[-1] if uri.startswith(self.PROTOCOL_PREFIX) else uri
-                if clean_path == uri and uri not in ["", ".", "./"]: # Probably a full repo name
+                clean_path = (
+                    uri.split("/")[-1] if uri.startswith(self.PROTOCOL_PREFIX) else uri
+                )
+                if clean_path == uri and uri not in [
+                    "",
+                    ".",
+                    "./",
+                ]:  # Probably a full repo name
                     sandbox_path = "/home/user/repo"
                 else:
-                    sandbox_path = f"/home/user/repo/{clean_path}" if not clean_path.startswith("/") else clean_path
-                
-                logger.info("📦 Sandbox Tool: Listing directory in E2B: %s", sandbox_path)
+                    sandbox_path = (
+                        f"/home/user/repo/{clean_path}"
+                        if not clean_path.startswith("/")
+                        else clean_path
+                    )
+
+                logger.info(
+                    "📦 Sandbox Tool: Listing directory in E2B: %s", sandbox_path
+                )
                 entries = sb.files.list(sandbox_path)
                 return [e.name + ("/" if e.type == "dir" else "") for e in entries]
             except Exception as e:
@@ -239,7 +278,12 @@ class ResourceManager:
 
         await self._ensure_mcp_connection(server)
 
-        logger.info("Proxying read to MCP server '%s' for '%s' (branch: %s)", server, remainder, branch)
+        logger.info(
+            "Proxying read to MCP server '%s' for '%s' (branch: %s)",
+            server,
+            remainder,
+            branch,
+        )
 
         session = self.mcp_manager.sessions.get(server)
         if not session:
@@ -256,29 +300,34 @@ class ResourceManager:
             if branch:
                 args["branch"] = branch
 
-            result = await session.call_tool(
-                "get_file_contents", args
-            )
-            
+            result = await session.call_tool("get_file_contents", args)
+
             # The GitHub MCP tool 'get_file_contents' returns a JSON response in a text block
             # We need to parse that JSON and decode the base64 'content' field.
-            import json
             import base64
-            
-            combined_text = "".join(getattr(block, "text") for block in result.content if hasattr(block, "text"))
-            
+            import json
+
+            combined_text = "".join(
+                getattr(block, "text")
+                for block in result.content
+                if hasattr(block, "text")
+            )
+
             try:
                 data = json.loads(combined_text)
                 if isinstance(data, dict) and "content" in data:
                     content_str = data["content"]
                     encoding = data.get("encoding", "")
-                    
+
                     if encoding == "base64":
                         return base64.b64decode(content_str).decode("utf-8")
                     return content_str
             except (json.JSONDecodeError, Exception) as e:
-                logger.debug("Failed to parse GitHub MCP response as JSON, returning raw text: %s", e)
-                
+                logger.debug(
+                    "Failed to parse GitHub MCP response as JSON, returning raw text: %s",
+                    e,
+                )
+
             return combined_text
 
         elif server == "gdrive":
@@ -291,7 +340,9 @@ class ResourceManager:
 
         return f"[Unsupported MCP Server: {server}]"
 
-    async def _write_mcp(self, uri: str, content: str, branch: Optional[str] = None) -> bool:
+    async def _write_mcp(
+        self, uri: str, content: str, branch: Optional[str] = None
+    ) -> bool:
         """Translates mcp:// URI to an MCP write tool call."""
         uri_no_proto = self.clean_uri(uri)
         parts = uri_no_proto.split("/", 1)

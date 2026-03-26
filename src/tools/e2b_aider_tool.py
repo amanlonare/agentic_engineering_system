@@ -1,13 +1,15 @@
 import os
 import shlex
-import warnings
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
+
 from e2b import Sandbox, SandboxNotFoundException
 from e2b.sandbox.commands.command_handle import CommandExitException
+
 from src.core.config import settings
 from src.utils.logger import configure_logging
 
 logger = configure_logging("e2b_aider_tool")
+
 
 async def get_sandbox(
     repo_url: Optional[str] = None,
@@ -37,7 +39,7 @@ async def get_sandbox(
         github_token = settings.GITHUB_TOKEN
         if "github.com" in repo_url and github_token and github_token not in repo_url:
             repo_url = repo_url.replace("https://", f"https://{github_token}@")
-        
+
         try:
             sb.commands.run(f"test -d {repo_path}")
         except CommandExitException:
@@ -49,8 +51,11 @@ async def get_sandbox(
 def _setup_git_identity(sb: Sandbox, repo_path: str) -> None:
     """Configures a generic Git identity to avoid 'Your Name' attribution noise."""
     try:
-        sb.commands.run(f'git config --global user.email "aes@system.ai"', cwd=repo_path)
-        sb.commands.run(f'git config --global user.name "Agentic Engineering System (AES)"', cwd=repo_path)
+        sb.commands.run('git config --global user.email "aes@system.ai"', cwd=repo_path)
+        sb.commands.run(
+            'git config --global user.name "Agentic Engineering System (AES)"',
+            cwd=repo_path,
+        )
         logger.info("🆔 Git identity configured: AES <aes@system.ai>")
     except CommandExitException as e:
         logger.warning("⚠️ Failed to setup Git identity (Git command failed): %s", e)
@@ -114,7 +119,12 @@ async def run_command_in_e2b(
         # Merge caller-provided env on top of defaults so credentials are always present
         merged_env = {**_build_default_env(), **(env or {})}
 
-        logger.info("🐚 E2B: Executing '%s' in '%s' (sandbox: %s)...", command, repo_path, sb.sandbox_id)
+        logger.info(
+            "🐚 E2B: Executing '%s' in '%s' (sandbox: %s)...",
+            command,
+            repo_path,
+            sb.sandbox_id,
+        )
 
         result = sb.commands.run(
             command,
@@ -156,10 +166,12 @@ async def run_aider_in_e2b(
     try:
         action = "Connecting to" if sandbox_id else "Creating"
         log_mode = " (Verification Mode)" if run_only else ""
-        logger.info("%s E2B sandbox %s (id: %s)...", action, log_mode, sandbox_id or "new")
-        
+        logger.info(
+            "%s E2B sandbox %s (id: %s)...", action, log_mode, sandbox_id or "new"
+        )
+
         sb, repo_path = await get_sandbox(repo_url, sandbox_id)
-        
+
         # Setup Branch
         if branch:
             try:
@@ -178,7 +190,7 @@ async def run_aider_in_e2b(
         final_instructions = instructions
         if system_prompt:
             final_instructions = f"{system_prompt}\n\nTASK:\n{instructions}"
-        
+
         if run_only:
             # Add strict sandbox guard if not already in system_prompt
             if "DO NOT MODIFY" not in final_instructions:
@@ -195,12 +207,12 @@ async def run_aider_in_e2b(
             "--yes --exit --no-attribute-author --no-attribute-committer "
             "--no-attribute-co-authored-by"
         )
-        
+
         env = _build_default_env()
         aider_res = sb.commands.run(
-            aider_cmd, 
-            cwd=repo_path, 
-            envs=env, 
+            aider_cmd,
+            cwd=repo_path,
+            envs=env,
             timeout=0,
             on_stdout=_print_stream,
             on_stderr=_print_stream,
@@ -214,7 +226,7 @@ async def run_aider_in_e2b(
                 sb.commands.run(f"git push origin {safe_branch}", cwd=repo_path)
             except CommandExitException as e:
                 logger.warning("Push failed (perhaps nothing to push?): %s", e)
-        
+
         try:
             sha_res = sb.commands.run("git rev-parse HEAD", cwd=repo_path)
             commit_sha = sha_res.stdout.strip()

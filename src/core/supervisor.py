@@ -2,6 +2,8 @@
 The Chief Orchestrator routing logic. Determines the `next_action` in the workflow.
 """
 
+import warnings
+
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import (
     ChatPromptTemplate,
@@ -15,7 +17,7 @@ from src.core.config_manager import app_config, config_manager
 from src.core.state import EngineeringState, NodeName
 from src.core.workspace import WorkspaceManager
 from src.prompts.supervisor import SUPERVISOR_SYSTEM_PROMPT
-from src.schemas import GrowthRecommendationType, NodeName, RouteDecision, StepStatus
+from src.schemas import GrowthRecommendationType, RouteDecision, StepStatus
 from src.utils.logger import configure_logging
 
 logger = configure_logging("supervisor")
@@ -112,18 +114,21 @@ def _check_growth_follow_up(state: EngineeringState, logger):
     return None
 
 
-import warnings
 async def supervisor_node(state: EngineeringState, config: RunnableConfig) -> dict:
     """
     The LangGraph node function that acts as the Supervisor.
     It inspects the state, queries the LLM, and returns the 'next_action'.
     """
     with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", category=UserWarning, message=".*Pydantic serializer warnings.*")
+        warnings.filterwarnings(
+            "ignore", category=UserWarning, message=".*Pydantic serializer warnings.*"
+        )
         return await _supervisor_node_impl(state, config)
 
 
-async def _supervisor_node_impl(state: EngineeringState, config: RunnableConfig) -> dict:
+async def _supervisor_node_impl(
+    state: EngineeringState, config: RunnableConfig
+) -> dict:
     """
     The LangGraph node function that acts as the Supervisor.
     It inspects the state, queries the LLM, and returns the 'next_action'.
@@ -178,10 +183,9 @@ async def _supervisor_node_impl(state: EngineeringState, config: RunnableConfig)
     # Get GraphStore summary
     try:
         wm = WorkspaceManager()
-        graph_summary = wm.get_org_summary()
+        _ = wm.get_org_summary()  # Call to ensure connectivity/warm-up
     except Exception as e:
         logger.warning("Could not retrieve graph summary: %s", e)
-        graph_summary = "Graph summary unavailable."
 
     system_prompt = SystemMessagePromptTemplate.from_template(SUPERVISOR_SYSTEM_PROMPT)
     # We pass the full state context to help the supervisor route correctly
@@ -226,14 +230,18 @@ async def _supervisor_node_impl(state: EngineeringState, config: RunnableConfig)
 
             for step in state.task_plan.steps:
                 is_completed = step.id in completed_set
-                
+
                 # RE-VERIFICATION GATE:
                 # If assigned to ops, check if it was actually ops who finished it last.
                 if is_completed and step.assigned_to.lower() == "ops":
                     last_success = next(
-                        (rec for rec in reversed(state.execution_history or [])
-                         if rec.step_id == step.id and rec.status == StepStatus.COMPLETED),
-                        None
+                        (
+                            rec
+                            for rec in reversed(state.execution_history or [])
+                            if rec.step_id == step.id
+                            and rec.status == StepStatus.COMPLETED
+                        ),
+                        None,
                     )
                     # If last execution was NOT by ops, it's pending re-verification
                     if last_success and last_success.agent.lower() != "ops":
@@ -295,6 +303,7 @@ async def _supervisor_node_impl(state: EngineeringState, config: RunnableConfig)
                         }
 
                     import re
+
                     is_env_error = any(
                         re.search(pattern, last_record.outcome, re.IGNORECASE)
                         for pattern in ENVIRONMENT_ERROR_PATTERNS
@@ -359,18 +368,23 @@ async def _supervisor_node_impl(state: EngineeringState, config: RunnableConfig)
             # If no rework needed, find the first uncompleted step
             for step in state.task_plan.steps:
                 is_completed = step.id in completed_set
-                
+
                 # RE-VERIFICATION GATE:
                 if is_completed and step.assigned_to.lower() == "ops":
                     last_success = next(
-                        (rec for rec in reversed(state.execution_history or [])
-                         if rec.step_id == step.id and rec.status == StepStatus.COMPLETED),
-                        None
+                        (
+                            rec
+                            for rec in reversed(state.execution_history or [])
+                            if rec.step_id == step.id
+                            and rec.status == StepStatus.COMPLETED
+                        ),
+                        None,
                     )
                     if last_success and last_success.agent.lower() != "ops":
                         logger.info(
                             "🔄 Step %s (Ops) was last touched by %s. Forcing re-verification.",
-                            step.id, last_success.agent
+                            step.id,
+                            last_success.agent,
                         )
                         is_completed = False
 

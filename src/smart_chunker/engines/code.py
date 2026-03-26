@@ -145,14 +145,16 @@ class CodeEngine(BaseEngine):
                         # The @name capture in the SCM query will be in the captures list
                         # but here we are iterating over 'node' where tag is 'class' or 'func'.
                         # For 'variable_declarator', the name is child with field 'name'.
-                        name_node = node.child_by_field_name("name") or node.child_by_field_name("key")
+                        name_node = node.child_by_field_name(
+                            "name"
+                        ) or node.child_by_field_name("key")
                     elif node.type in ["interface_declaration", "class_declaration"]:
                         # Search for type_identifier in children
                         for child in node.children:
                             if child.type == "type_identifier":
                                 name_node = child
                                 break
-                                
+
                 symbol_name = self._get_node_text(name_node, content)
                 if not symbol_name and node.type == "arrow_function":
                     # Fallback for old-style direct arrow captures if they persist

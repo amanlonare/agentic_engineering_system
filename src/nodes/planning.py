@@ -7,7 +7,7 @@ from langchain_core.runnables import RunnableConfig
 from src.core.config_manager import app_config, config_manager
 from src.core.state import EngineeringState
 from src.core.workspace import WorkspaceManager
-from src.schemas import ApprovalStatus, ExecutionStep, TechnicalPlan
+from src.schemas import ApprovalStatus, TechnicalPlan
 from src.tools.codebase_tools import get_restricted_tools, search_codebase
 from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.utils.logger import configure_logging
@@ -57,7 +57,9 @@ async def planning_node(
 
     # Use repo-scoped tools, filter out write_file since planner doesn't write code
     restricted_tools = get_restricted_tools(str(repo))
-    tools = [t for t in restricted_tools if t.name not in ("write_file", "replace_in_file")]
+    tools = [
+        t for t in restricted_tools if t.name not in ("write_file", "replace_in_file")
+    ]
     tools.append(search_codebase)
 
     llm_with_tools = llm.bind_tools(tools)
@@ -152,18 +154,24 @@ async def planning_node(
                 ],
                 config=config,
             )
-            raw_slug = str(getattr(slug_resp, 'content', slug_resp)).strip().lower()
+            raw_slug = str(getattr(slug_resp, "content", slug_resp)).strip().lower()
             slug = re.sub(r"[^a-z0-9]+", "-", raw_slug).strip("-")[:35] or "task"
             branch_name = f"{app_config.system.branch_prefix}{slug}-{datetime.now().strftime('%m%d%H%M')}"
 
         # Inject branch name and repo requirement into the final prompt
-        messages.append(HumanMessage(content=(
-            f"Please generate the TechnicalPlan now.\n"
-            f"IMPORTANT: Do NOT create steps for git branch creation, git commit, or git push — these are handled automatically.\n"
-            f"IMPORTANT: For 'target_repo', use the full identifier '{repo}' (owner/repo) for all steps."
-        )))
+        messages.append(
+            HumanMessage(
+                content=(
+                    f"Please generate the TechnicalPlan now.\n"
+                    f"IMPORTANT: Do NOT create steps for git branch creation, git commit, or git push — these are handled automatically.\n"
+                    f"IMPORTANT: For 'target_repo', use the full identifier '{repo}' (owner/repo) for all steps."
+                )
+            )
+        )
 
-        logger.info("📋 Generating structured TechnicalPlan with branch: %s", branch_name)
+        logger.info(
+            "📋 Generating structured TechnicalPlan with branch: %s", branch_name
+        )
         plan: Any = await structured_llm.ainvoke(messages, config=config)
 
         # Update the plan Markdown for the user
@@ -220,9 +228,11 @@ async def planning_node(
             "task_plan": plan,
             "branch_name": branch_name,
             "approval_status": ApprovalStatus.APPROVED,
-            "trigger": state.trigger.model_copy(update={"repo_name": repo})
-            if state.trigger
-            else None,
+            "trigger": (
+                state.trigger.model_copy(update={"repo_name": repo})
+                if state.trigger
+                else None
+            ),
         }
 
     except Exception as e:

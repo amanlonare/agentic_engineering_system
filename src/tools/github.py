@@ -15,7 +15,9 @@ logger = configure_logging()
 def _get_default_branch(owner: str, repo: str) -> str:
     """Dynamically fetches the default branch from the GitHub API."""
     url = f"https://api.github.com/repos/{owner}/{repo}"
-    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GITHUB_PERSONAL_ACCESS_TOKEN")
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get(
+        "GITHUB_PERSONAL_ACCESS_TOKEN"
+    )
     req = urllib.request.Request(url)
     req.add_header("User-Agent", "Agentic-Engineering-System")
     if token:
@@ -27,17 +29,24 @@ def _get_default_branch(owner: str, repo: str) -> str:
                 return data.get("default_branch", app_config.system.default_branch)
     except Exception as e:
         logger.warning(
-            "Failed to fetch default branch for %s/%s: %s. Falling back to config.", owner, repo, e
+            "Failed to fetch default branch for %s/%s: %s. Falling back to config.",
+            owner,
+            repo,
+            e,
         )
 
     return app_config.system.default_branch
 
 
 @tool
-async def create_branch(owner: str, repo: str, branch: str, from_branch: Optional[str] = None) -> str:
+async def create_branch(
+    owner: str, repo: str, branch: str, from_branch: Optional[str] = None
+) -> str:
     """Creates a new branch on a GitHub repository."""
     target_from = from_branch or _get_default_branch(owner, repo)
-    logger.info("🐙 Creating Branch: '%s' from '%s' in %s/%s", branch, target_from, owner, repo)
+    logger.info(
+        "🐙 Creating Branch: '%s' from '%s' in %s/%s", branch, target_from, owner, repo
+    )
 
     await resource_manager._ensure_mcp_connection("github")
     session = resource_manager.mcp_manager.sessions.get("github")
@@ -47,7 +56,12 @@ async def create_branch(owner: str, repo: str, branch: str, from_branch: Optiona
     try:
         await session.call_tool(
             "create_branch",
-            {"owner": owner, "repo": repo, "branch": branch, "from_branch": target_from},
+            {
+                "owner": owner,
+                "repo": repo,
+                "branch": branch,
+                "from_branch": target_from,
+            },
         )
         return f"SUCCESS: Branch '{branch}' created from '{target_from}'. You can now use 'branch=\"{branch}\"' in replace_in_file or write_file."
     except Exception as e:
@@ -84,7 +98,9 @@ async def list_branches(owner: str, repo: str) -> str:
         return "Error: GitHub MCP server not connected."
 
     try:
-        result = await session.call_tool("list_branches", {"owner": owner, "repo": repo})
+        result = await session.call_tool(
+            "list_branches", {"owner": owner, "repo": repo}
+        )
         return str(result)
     except Exception as e:
         return f"Error listing branches: {str(e)}"
@@ -117,7 +133,9 @@ async def get_restricted_github_tools(repo_path: str) -> list:
 
     from langchain_core.tools import StructuredTool
 
-    async def _restricted_create_branch(branch: str, from_branch: Optional[str] = None) -> str:
+    async def _restricted_create_branch(
+        branch: str, from_branch: Optional[str] = None
+    ) -> str:
         """Creates a new branch on the locked GitHub repository."""
         return await create_branch.ainvoke(
             {"owner": owner, "repo": repo, "branch": branch, "from_branch": from_branch}
@@ -125,7 +143,9 @@ async def get_restricted_github_tools(repo_path: str) -> list:
 
     async def _restricted_get_branch(branch: str) -> str:
         """Gets information about a branch on the locked GitHub repository."""
-        return await get_branch.ainvoke({"owner": owner, "repo": repo, "branch": branch})
+        return await get_branch.ainvoke(
+            {"owner": owner, "repo": repo, "branch": branch}
+        )
 
     async def _restricted_list_branches() -> str:
         """Lists all branches in the locked GitHub repository."""
@@ -148,4 +168,3 @@ async def get_restricted_github_tools(repo_path: str) -> list:
             description="Lists all branches in the locked GitHub repository.",
         ),
     ]
-

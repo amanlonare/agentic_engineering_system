@@ -168,9 +168,7 @@ class MCPClientManager:
                 pass
             except Exception as e:
                 # Catch other potential errors during cleanup
-                logger.warning(
-                    f"Note: Error during cleanup of {name}: {e}"
-                )
+                logger.warning(f"Note: Error during cleanup of {name}: {e}")
         self.sessions = {}
         self.exit_stacks = {}
         self._tools_cache = {}

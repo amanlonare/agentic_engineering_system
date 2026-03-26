@@ -46,7 +46,9 @@ async def cleanup_node(state: EngineeringState) -> Dict[str, Any]:
     if state.sandbox_id:
         try:
             from e2b import Sandbox
+
             from src.core.config import settings
+
             # We use Sandbox.connect to get a handle, then close/kill it
             with Sandbox.connect(state.sandbox_id, api_key=settings.E2B_API_KEY) as sb:
                 sb.kill()

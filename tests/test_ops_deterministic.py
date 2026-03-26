@@ -35,20 +35,24 @@ class TestOpsDeterministic(unittest.IsolatedAsyncioTestCase):
         )
 
     @patch("src.nodes.ops.config_manager.get_agent_llm")
-    @patch("src.nodes.ops.get_ops_tools")
+    @patch("src.nodes.ops.run_aider_in_e2b")
     @patch("src.nodes.ops.load_agent_persona")
     @patch("src.nodes.ops.build_system_prompt")
     async def test_ops_successful_verification(
-        self, mock_build_prompt, mock_load_persona, mock_get_tools, mock_get_agent_llm
+        self, mock_build_prompt, mock_load_persona, mock_run_aider, mock_get_agent_llm
     ):
 
         # 1. Setup Mocks
         mock_load_persona.return_value = {"name": "ops", "system_prompt": "You are ops"}
         mock_build_prompt.return_value = "System prompt"
 
-        mock_tool = AsyncMock()
-        mock_tool.name = "execute_command"
-        mock_get_tools.return_value = [mock_tool]
+        # Mock aider result
+        mock_run_aider.return_value = {
+            "success": True,
+            "logs": "Tests passed",
+            "commit_sha": "abc123",
+            "sandbox_id": "sb-123",
+        }
 
         # Mock LLM behavior for tool calling loop
         mock_llm_instance = AsyncMock()
@@ -106,12 +110,12 @@ class TestOpsDeterministic(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["execution_history"][0].step_id, "STEP-1")
         self.assertEqual(result["execution_history"][0].status, StepStatus.COMPLETED)
 
-        # Verify tool was called
-        mock_tool.ainvoke.assert_called_once_with({"command": "pytest"})
+        # Verify aider was called
+        mock_run_aider.assert_called_once()
 
     @patch("src.nodes.ops.config_manager.get_agent_llm")
-    @patch("src.nodes.ops.get_ops_tools")
-    async def test_ops_failure_verification(self, mock_get_tools, mock_get_agent_llm):
+    @patch("src.nodes.ops.run_aider_in_e2b")
+    async def test_ops_failure_verification(self, mock_run_aider, mock_get_agent_llm):
         # Mock failure scenario
 
         mock_llm_instance = AsyncMock()
@@ -138,6 +142,11 @@ class TestOpsDeterministic(unittest.IsolatedAsyncioTestCase):
             return_value=mock_structured_llm
         )
         mock_get_agent_llm.return_value = mock_llm_instance
+        mock_run_aider.return_value = {
+            "success": True,
+            "logs": "Some tests failed",
+            "sandbox_id": "sb-123",
+        }
 
         state = EngineeringState(
             messages=[HumanMessage(content="Current Plan Step [STEP-1]")],

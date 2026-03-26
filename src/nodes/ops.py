@@ -1,24 +1,15 @@
-import os
-import aiohttp
-import shlex
 import warnings
 from typing import Any, Dict, List, cast
 
-from langchain_core.messages import (
-    AIMessage,
-    BaseMessage,
-    HumanMessage,
-    SystemMessage,
-)
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables.config import RunnableConfig
 
-from src.core.config_manager import app_config, config_manager
+from src.core.config_manager import config_manager
 from src.core.resource_manager import ResourceManager
 from src.core.state import EngineeringState
 from src.schemas import StepExecutionRecord, StepStatus, TestReport
-from src.tools.codebase_tools import get_ops_tools
-from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.tools.e2b_aider_tool import kill_sandbox, run_aider_in_e2b
+from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.utils.logger import configure_logging
 
 logger = configure_logging("ops")
@@ -113,11 +104,16 @@ async def ops_node(state: EngineeringState, config: RunnableConfig) -> Dict[str,
         # 3. Call Aider in Sandbox (Verification Mode)
         aider_instructions = instructions
         if current_step and current_step.verification_criteria:
-            aider_instructions += f"\n\nVerification Criteria: {current_step.verification_criteria}"
-        
+            aider_instructions += (
+                f"\n\nVerification Criteria: {current_step.verification_criteria}"
+            )
+
         # Decide if we should push (only if it's a git-related step or explicitly mentioned)
         skip_push = True
-        if current_step and any(word in current_step.description.lower() for word in ["push", "git", "remote"]):
+        if current_step and any(
+            word in current_step.description.lower()
+            for word in ["push", "git", "remote"]
+        ):
             skip_push = False
             logger.info("🚀 Step involves git/push. skip_push -> False.")
 
@@ -129,7 +125,7 @@ async def ops_node(state: EngineeringState, config: RunnableConfig) -> Dict[str,
 
         repo_name = state.trigger.repo_name if state.trigger else ""
         repo_url = f"https://github.com/{repo_name}.git" if repo_name else ""
-        
+
         aider_res = await run_aider_in_e2b(
             repo_url=repo_url,
             instructions=aider_instructions,
@@ -143,26 +139,32 @@ async def ops_node(state: EngineeringState, config: RunnableConfig) -> Dict[str,
         )
 
         if not aider_res["success"]:
-             raise Exception(aider_res.get("error", "Aider failed in sandbox"))
+            raise Exception(aider_res.get("error", "Aider failed in sandbox"))
 
         # 4. Generate Structured TestReport via LLM analysis of Aider output
         logger.info("📋 Finalizing structured TestReport from Aider output...")
         structured_llm = llm.with_structured_output(TestReport)
-        
+
         # We need to feed the Aider outcome back to the LLM to get a structured report
         aider_outcome_msg = HumanMessage(
             content=f"Aider finished the verification task. SUCCESS: {aider_res['success']}\n"
-                    f"Sandboxed Aider logs: {aider_res.get('logs', 'No logs returned')}\n\n"
-                    "Analyze these results and generate the final structured TestReport. "
-                    "If tests failed or deps couldn't be installed, succeed should be False."
+            f"Sandboxed Aider logs: {aider_res.get('logs', 'No logs returned')}\n\n"
+            "Analyze these results and generate the final structured TestReport. "
+            "If tests failed or deps couldn't be installed, succeed should be False."
         )
 
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=UserWarning, message=".*Pydantic.*")
+            warnings.filterwarnings(
+                "ignore", category=UserWarning, message=".*Pydantic.*"
+            )
             report = cast(
                 TestReport,
                 await structured_llm.ainvoke(
-                    [SystemMessage(content=system_prompt), HumanMessage(content=instructions), aider_outcome_msg],
+                    [
+                        SystemMessage(content=system_prompt),
+                        HumanMessage(content=instructions),
+                        aider_outcome_msg,
+                    ],
                     config=config,
                 ),
             )
@@ -189,7 +191,9 @@ async def ops_node(state: EngineeringState, config: RunnableConfig) -> Dict[str,
             ]
             completed_ids = [current_step.id] if report.success else []
 
-        final_msg = AIMessage(content=f"Ops Verification {'Passed' if report.success else 'Failed'}: {report.logs or 'No summary'}")
+        final_msg = AIMessage(
+            content=f"Ops Verification {'Passed' if report.success else 'Failed'}: {report.logs or 'No summary'}"
+        )
         messages.append(final_msg)
 
         response_payload: Dict[str, Any] = {

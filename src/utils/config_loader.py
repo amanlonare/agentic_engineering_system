@@ -38,7 +38,7 @@ def build_system_prompt(persona: Dict[str, Any]) -> str:
     prompt = f"Identity: {persona.get('name', 'Assistant')}\n"
     prompt += f"Role: {persona.get('description', '')}\n\n"
 
-    # We omit 'allowed_tools' and 'forbidden_actions' here because they 
+    # We omit 'allowed_tools' and 'forbidden_actions' here because they
     # often confuse Aider into writing tool calls into the code files.
     # The persona yaml should use the 'system_prompt' field for specific behavioral rules.
 
