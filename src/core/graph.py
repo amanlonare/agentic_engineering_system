@@ -1,5 +1,7 @@
 import os
 
+from langchain_core.runnables.config import RunnableConfig
+from langfuse import observe
 from langgraph.graph import END, START, StateGraph
 
 from src.core.state import EngineeringState
@@ -14,6 +16,31 @@ from src.utils.logger import configure_logging
 logger = configure_logging()
 
 
+def wrap_node_with_tracing(node_func):
+    """
+    Wraps a LangGraph node to explicitly propagate Langfuse context
+    from the RunnableConfig metadata down to the @observe decorator.
+    """
+
+    @observe(name="Graph: Step Execution")
+    async def wrapped(state: EngineeringState, config: RunnableConfig):
+        # Extract the IDs injected by main.py
+        metadata = config.get("metadata", {})
+        trace_id = metadata.get("langfuse_trace_id")
+        parent_id = metadata.get("langfuse_parent_observation_id")
+
+        # Call the original node function with explicit context arguments
+        # The @observe decorator on the node functions will pop these to link the trace
+        return await node_func(
+            state,
+            config,
+            langfuse_trace_id=trace_id,
+            langfuse_parent_observation_id=parent_id,
+        )
+
+    return wrapped
+
+
 def build_graph(checkpointer=None):
     """
     Constructs and returns the compiled LangGraph.
@@ -23,12 +50,13 @@ def build_graph(checkpointer=None):
 
     builder = StateGraph(EngineeringState)
 
-    # 1. Add all nodes
-    builder.add_node(NodeName.SUPERVISOR, supervisor_node)
-    builder.add_node(NodeName.PLANNING, planning_node)
-    builder.add_node(NodeName.CODER, coder_node)
-    builder.add_node(NodeName.OPS, ops_node)
-    builder.add_node(NodeName.GROWTH, growth_node)
+    # 1. Add all nodes (wrapped with tracing propagation)
+    builder.add_node(NodeName.SUPERVISOR, wrap_node_with_tracing(supervisor_node))
+    builder.add_node(NodeName.PLANNING, wrap_node_with_tracing(planning_node))
+    builder.add_node(NodeName.CODER, wrap_node_with_tracing(coder_node))
+    builder.add_node(NodeName.OPS, wrap_node_with_tracing(ops_node))
+    builder.add_node(NodeName.GROWTH, wrap_node_with_tracing(growth_node))
+
     from src.nodes.cleanup import cleanup_node
 
     builder.add_node(NodeName.CLEANUP, cleanup_node)

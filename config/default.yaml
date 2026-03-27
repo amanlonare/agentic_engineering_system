@@ -2,25 +2,37 @@
 
 # LLM Global Defaults
 llm:
-  provider: "openai"
-  default_model: "gpt-4o-mini"
+  provider: "bedrock"
+  default_model: "apac.anthropic.claude-sonnet-4-20250514-v1:0"
   default_temperature: 0.0
   max_retries: 5
+  region: "ap-northeast-1" 
+  thinking: false
+  thinking_budget: 32000
   # Agent-specific overrides
   agents:
     planner:
-      model: "gpt-4o-mini"
+      provider: "bedrock"
+      model: "qwen.qwen3-next-80b-a3b"
       temperature: 0.1
     coder:
-      model: "gpt-4o-mini"
+      provider: "bedrock"
+      model: "apac.anthropic.claude-sonnet-4-20250514-v1:0"
       temperature: 0.0
+      thinking: true
+      thinking_budget: 32000
     ops:
-      model: "gpt-4o-mini"
+      provider: "bedrock"
+      model: "apac.anthropic.claude-sonnet-4-20250514-v1:0"
       temperature: 0.0
+      thinking: true
+      thinking_budget: 16000
     growth:
+      provider: "openai"
       model: "gpt-4o-mini"
       temperature: 0.0
     supervisor:
+      provider: "openai"
       model: "gpt-4o-mini"
       temperature: 0.0
 

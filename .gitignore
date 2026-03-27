@@ -94,8 +94,12 @@ tests/data/pdfs
 ingestion_sources.yaml
 
 # skills and plans
-.agent/
+.agents/
+.claude/
 .planning/
 
 # agent
 aider/
+
+# observability
+langfuse_trace

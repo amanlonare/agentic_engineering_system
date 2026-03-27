@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, cast
+from typing import List, cast
 
 from langchain_core.messages import (
     AIMessage,
@@ -8,6 +8,7 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.runnables import RunnableConfig
+from langfuse import observe
 
 from src.core.config_manager import app_config, config_manager
 from src.core.state import EngineeringState
@@ -20,9 +21,10 @@ from src.utils.logger import configure_logging
 logger = configure_logging("growth")
 
 
+@observe(name="Agent: Growth & Analysis")
 async def growth_node(
-    state: EngineeringState, config: RunnableConfig
-) -> Dict[str, Any]:
+    state: EngineeringState, config: RunnableConfig, **kwargs
+) -> dict:
     """
     Growth Agent: Analyzes user metrics and proposes strategies.
     Uses LLM tool-calling to process mobility data.
@@ -65,7 +67,9 @@ async def growth_node(
     MAX_TOOL_CALLS = agent_cfg.max_tool_calls if agent_cfg else 10
 
     for _ in range(MAX_TOOL_CALLS):
-        response = await llm_with_tools.ainvoke(messages, config=config)
+        response = await llm_with_tools.ainvoke(
+            messages, config={**config, "run_name": "Growth: Data Exploration"}
+        )
         messages.append(response)
 
         if not response.tool_calls:
@@ -96,7 +100,7 @@ async def growth_node(
 
     # Step 4: Final Structured Output
     logger.info("🎯 Generating final growth recommendation...")
-    analyzer_llm = llm.with_structured_output(GrowthRecommendation)
+    structured_llm = llm.with_structured_output(GrowthRecommendation)
     analysis_input = messages + [
         HumanMessage(
             content="Based on your findings, provide the final structured recommendation."
@@ -104,7 +108,9 @@ async def growth_node(
     ]
 
     # Cast/validate the result
-    recommendation_data = await analyzer_llm.ainvoke(analysis_input, config=config)
+    recommendation_data = await structured_llm.ainvoke(
+        analysis_input, config={**config, "run_name": "Growth: Strategic Delivery"}
+    )
     recommendation = cast(GrowthRecommendation, recommendation_data)
     if isinstance(recommendation_data, dict):
         recommendation = GrowthRecommendation(**recommendation_data)

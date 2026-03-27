@@ -7,15 +7,6 @@ llm:
   default_temperature: 0.1 # Slightly more creative for dev
   max_retries: 3           # Fewer retries to fail fast in dev
   agents:
-    planner:
-      model: "gpt-4o-mini"
-      temperature: 0.1
-    coder:
-      model: "gpt-4o-mini"
-      temperature: 0.0
-    ops:
-      model: "gpt-4o-mini"
-      temperature: 0.0
     growth:
       model: "gpt-4o-mini"
       temperature: 0.0

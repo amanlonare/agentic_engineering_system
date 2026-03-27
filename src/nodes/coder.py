@@ -3,8 +3,9 @@ from typing import Any, Dict
 
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableConfig
+from langfuse import observe
 
-from src.core.config_manager import app_config
+from src.core.config_manager import app_config, config_manager
 from src.core.graph_store import GraphStore
 from src.core.resource_manager import ResourceManager
 from src.core.state import EngineeringState
@@ -40,7 +41,10 @@ async def _get_repo_url(repo_name: str) -> str:
     return f"https://github.com/{candidate}"  # Guessing the full path
 
 
-async def coder_node(state: EngineeringState, config: RunnableConfig) -> Dict[str, Any]:
+@observe(name="Agent: Coder")
+async def coder_node(
+    state: EngineeringState, config: RunnableConfig, **kwargs
+) -> Dict[str, Any]:
     """
     Coder Agent: Executes code changes using E2B + Aider.
     """
@@ -116,10 +120,11 @@ async def coder_node(state: EngineeringState, config: RunnableConfig) -> Dict[st
     persona = load_agent_persona("coder")
     system_prompt = build_system_prompt(persona)
 
-    # Resolve model from config with multiple fallbacks
-    coder_cfg = app_config.llm.agents.get("coder")
-    coder_model = getattr(coder_cfg, "model", None) if coder_cfg else None
-    coder_model = coder_model or getattr(app_config.llm, "default_model", "gpt-4o-mini")
+    # Resolve model, region, and thinking from config
+    coder_model = config_manager.get_aider_model_id("coder")
+    coder_region = config_manager.get_agent_region("coder")
+    thinking = config_manager.get_agent_thinking("coder")
+    thinking_budget = config_manager.get_agent_thinking_budget("coder")
 
     result = await run_aider_in_e2b(
         repo_url=repo_url,
@@ -130,6 +135,9 @@ async def coder_node(state: EngineeringState, config: RunnableConfig) -> Dict[st
         model=coder_model or "gpt-4o",
         sandbox_id=state.sandbox_id,
         system_prompt=system_prompt,
+        region=coder_region,
+        thinking=thinking,
+        thinking_budget=thinking_budget,
     )
 
     # Update sandbox ID in state if it's new

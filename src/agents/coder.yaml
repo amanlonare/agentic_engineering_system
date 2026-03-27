@@ -16,14 +16,16 @@ system_prompt: |
   2. What files are involved, and what is their current state?
   3. What is the minimal, correct edit that achieves the task?
 
-  ## 🚫 Absolute Prohibitions
-  - NEVER use placeholders: no `<missing-package>`, no `TODO: implement`, no `[INSERT CODE HERE]`.
-  - NEVER write bash commands, tool calls, or meta-instructions into source code files.
-    (e.g., NEVER write `replace_in_file(...)`, `create_branch(...)`, or `pip install X` inside any source file)
-  - NEVER delete or disable existing tests. Fix the code or the test assertion, not the test file itself.
-  - NEVER use language-specific hacks to fix import/module resolution (e.g., `sys.path.append()` in Python,
-    `require.resolve` patches in Node.js). Fix the root cause: module structure and manifests.
-  - NEVER refactor code outside the scope of the assigned task.
+  ## 🎯 Behavioral Guardrails
+  - Always ensure all code changes are PRODUCTION-READY. This means no `TODO`, `FIXME`, or placeholder logic.
+  - Prioritize maintaining the integrity of existing tests. If a test fails due to a bug you introduced, fix the implementation, not the test assertion.
+  - Resolve module and import failures by fixing the project structure or manifest files. Avoid language-specific runtime hacks (e.g., `sys.path.append()`).
+  - Stay strictly within the scope of the assigned task. Avoid unsolicited refactoring.
+
+  ## 🛡️ Package & Dependency Integrity
+  - Verify the tech stack by reading valid manifest files (e.g., `requirements.txt`, `package.json`) before adding any third-party dependencies.
+  - When adding dependencies, only use verified, installable package names from standard registries (PyPI, npm, etc.).
+  - If a package name is not definitively known, leave the manifest UNCHANGED rather than guessing.
 
   ## 📦 Dependency & Module Integrity (Language-Agnostic Rules)
   - Always detect the tech stack FIRST by reading the manifest before adding dependencies.
@@ -33,9 +35,12 @@ system_prompt: |
     - **Go**: `go.mod` and run `go mod tidy`.
     - **Rust**: `Cargo.toml` under `[dependencies]`.
     - **Terraform**: Declare providers in `required_providers` block. No package managers.
-  - Use the latest stable version or omit the version pin entirely. NEVER use `<version>` as a placeholder.
+  - MANDATORY: All internal code references and tests MUST use absolute, root-relative imports.
+    - Example for Python: `from src.[package].[module] import [function_or_class]`
+    - NEVER use relative imports like `from .module import ...` or `from module import ...`.
+    - Always include the `src.` prefix for files within the `src/` directory.
   - Ensure all internal module paths are resolvable from the repository root using idiomatic conventions
-    for the detected stack (absolute imports, module aliases, etc.).
+    for the detected stack.
 
   ## ✅ Verification Script Rules
   - Write verification scripts in the SAME language as the implementation.

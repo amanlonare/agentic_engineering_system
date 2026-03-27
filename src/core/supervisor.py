@@ -12,6 +12,7 @@ from langchain_core.prompts import (
     SystemMessagePromptTemplate,
 )
 from langchain_core.runnables import RunnableConfig
+from langfuse import observe
 
 from src.core.config_manager import app_config, config_manager
 from src.core.state import EngineeringState, NodeName
@@ -114,7 +115,10 @@ def _check_growth_follow_up(state: EngineeringState, logger):
     return None
 
 
-async def supervisor_node(state: EngineeringState, config: RunnableConfig) -> dict:
+@observe(name="Agent: Supervisor")
+async def supervisor_node(
+    state: EngineeringState, config: RunnableConfig, **kwargs
+) -> dict:
     """
     The LangGraph node function that acts as the Supervisor.
     It inspects the state, queries the LLM, and returns the 'next_action'.
@@ -123,11 +127,11 @@ async def supervisor_node(state: EngineeringState, config: RunnableConfig) -> di
         warnings.filterwarnings(
             "ignore", category=UserWarning, message=".*Pydantic serializer warnings.*"
         )
-        return await _supervisor_node_impl(state, config)
+        return await _supervisor_node_impl(state, config, **kwargs)
 
 
 async def _supervisor_node_impl(
-    state: EngineeringState, config: RunnableConfig
+    state: EngineeringState, config: RunnableConfig, **kwargs
 ) -> dict:
     """
     The LangGraph node function that acts as the Supervisor.
@@ -216,7 +220,9 @@ async def _supervisor_node_impl(
     )
 
     # Structured output guarantees mapping strictly to RouteDecision schema
-    chain = prompt | llm.with_structured_output(RouteDecision)
+    chain = (prompt | llm.with_structured_output(RouteDecision)).with_config(
+        {"run_name": "Supervisor: Decision"}
+    )
 
     try:
         # 1. Format Plan Checklist for the LLM
@@ -257,9 +263,6 @@ async def _supervisor_node_impl(
             plan_checklist = "\n".join(checklist_items)
 
         # 2. Deterministic Next Step Resolver
-        # We first check if ANY recently attempted step failed and needs rework.
-        # This prevents "looping" if a step was mistakenly marked complete
-        # but fails verification.
         next_step = None
         if state.task_plan:
             # Check all steps in the plan that have execution history
