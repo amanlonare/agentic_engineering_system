@@ -11,7 +11,7 @@ from src.core.config import settings
 from src.core.config_manager import app_config
 from src.core.graph import build_graph
 from src.core.state import EngineeringState
-from src.core.tracing import auth_check, flush, get_langfuse_handler
+from src.core.tracing import auth_check, flush, get_langfuse_handler, langfuse_session
 from src.schemas import TriggerContext, TriggerType
 from src.utils.logger import configure_logging
 
@@ -76,34 +76,44 @@ async def main():
                     # 3. Invoke the graph asynchronously
                     # Tracing is handled automatically by the CallbackHandler in 'config'
                     try:
-                        async for event in graph.astream(initial_state, config):
-                            for node_name, node_state in event.items():
-                                if node_state is None:
-                                    continue
-                                logger.info(f"--- Finished node: {node_name} ---")
+                        with langfuse_session(
+                            session_id=thread_id,
+                            user_id="cli-user",
+                            trace_name=f"CLI: {user_input[:50]}...",
+                        ):
+                            async for event in graph.astream(initial_state, config):
+                                for node_name, node_state in event.items():
+                                    if node_state is None:
+                                        continue
+                                    logger.info(f"--- Finished node: {node_name} ---")
 
-                                # Print agent messages for the user to see
-                                if "messages" in node_state and node_state["messages"]:
-                                    last_msg = node_state["messages"][-1]
-                                    if hasattr(last_msg, "content"):
-                                        content = last_msg.content
-                                        # Truncate if too long (unless it's a planning node) for cleaner CLI output
-                                        MAX_DISPLAY = app_config.system.log_snippet_size
-                                        if (
-                                            len(content) > MAX_DISPLAY
-                                            and "PLANNING" not in node_name.upper()
-                                        ):
-                                            content = (
-                                                content[:MAX_DISPLAY]
-                                                + f"\n... (truncated to {MAX_DISPLAY} chars, see full logs for details)"
+                                    # Print agent messages for the user to see
+                                    if (
+                                        "messages" in node_state
+                                        and node_state["messages"]
+                                    ):
+                                        last_msg = node_state["messages"][-1]
+                                        if hasattr(last_msg, "content"):
+                                            content = last_msg.content
+                                            # Truncate if too long (unless it's a planning node) for cleaner CLI output
+                                            MAX_DISPLAY = (
+                                                app_config.system.log_snippet_size
                                             )
-                                        print(f"\n🤖 [{node_name}]:\n{content}\n")
+                                            if (
+                                                len(content) > MAX_DISPLAY
+                                                and "PLANNING" not in node_name.upper()
+                                            ):
+                                                content = (
+                                                    content[:MAX_DISPLAY]
+                                                    + f"\n... (truncated to {MAX_DISPLAY} chars, see full logs for details)"
+                                                )
+                                            print(f"\n🤖 [{node_name}]:\n{content}\n")
 
-                                # We log internal status, but in a real CLI we might filter this
-                                if node_state.get("next_action"):
-                                    logger.info(
-                                        f"Supervisor Decision: {node_state['next_action']}"
-                                    )
+                                    # We log internal status, but in a real CLI we might filter this
+                                    if node_state.get("next_action"):
+                                        logger.info(
+                                            f"Supervisor Decision: {node_state['next_action']}"
+                                        )
                     except Exception as graph_err:
                         logger.error("Error during graph execution: %s", str(graph_err))
 

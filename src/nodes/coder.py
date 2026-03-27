@@ -7,11 +7,11 @@ from langfuse import observe
 
 from src.core.config_manager import app_config, config_manager
 from src.core.graph_store import GraphStore
+from src.core.prompts import prompt_manager
 from src.core.resource_manager import ResourceManager
 from src.core.state import EngineeringState
 from src.schemas import StepExecutionRecord, StepStatus
 from src.tools.e2b_aider_tool import run_aider_in_e2b
-from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.utils.logger import configure_logging
 
 logger = configure_logging("coder")
@@ -116,9 +116,9 @@ async def coder_node(
         repo_name,
     )
 
-    # Resolve persona
-    persona = load_agent_persona("coder")
-    system_prompt = build_system_prompt(persona)
+    # Resolve prompt from PromptManager (Langfuse vs Local fallback)
+    lf_prompt = prompt_manager.get_prompt("coder-system")
+    system_prompt = lf_prompt.compile()
 
     # Resolve model, region, and thinking from config
     coder_model = config_manager.get_aider_model_id("coder")
@@ -138,6 +138,7 @@ async def coder_node(
         region=coder_region,
         thinking=thinking,
         thinking_budget=thinking_budget,
+        langfuse_prompt=lf_prompt,
     )
 
     # Update sandbox ID in state if it's new

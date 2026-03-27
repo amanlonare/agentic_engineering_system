@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     LANGFUSE_PUBLIC_KEY: str | None = Field(default=None, repr=False)
     LANGFUSE_SECRET_KEY: str | None = Field(default=None, repr=False)
     LANGFUSE_BASE_URL: str = Field(default="https://cloud.langfuse.com", repr=True)
+    USE_LANGFUSE_PROMPTS: bool = Field(default=True, repr=True)
 
     # --- Storage: Evaluation (isolated, never mixes with production) ---
     EVAL_CHROMA_COLLECTION_NAME: str = "eval_rag_chunks"

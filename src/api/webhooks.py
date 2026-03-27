@@ -13,6 +13,7 @@ from src.api.dependencies import get_graph, get_workspace_manager
 from src.core.config import settings
 from src.core.mcp_client import MCPClientManager
 from src.core.state import EngineeringState
+from src.core.tracing import langfuse_session
 from src.core.workspace import WorkspaceManager
 from src.schemas import TriggerContext, TriggerType
 from src.utils.logger import configure_logging
@@ -104,7 +105,7 @@ async def github_webhook(
 
     # 4. Identify Target Repository using Semantic Search
     search_context = f"{title}\n\n{issue_body}"
-    target_repo = workspace_manager.identify_repository(search_context)
+    target_repo = await workspace_manager.identify_repository(search_context)
 
     # 5. Build Initial State
     thread_id = (
@@ -146,10 +147,17 @@ async def github_webhook(
     final_state_data = None
     try:
         # Iterate to completion
-        for event in graph.stream(state, config):
-            for node_name, node_state in event.items():
-                logger.info(f"Graph running / Finished node: {node_name}")
-                final_state_data = node_state
+
+        with langfuse_session(
+            session_id=thread_id,
+            user_id=f"github-{sender}",
+            trace_name=f"Webhook: {repo_full_name} (by {sender})",
+        ):
+            for event in graph.stream(state, config):
+                for node_name, node_state in event.items():
+                    logger.info(f"Graph running / Finished node: {node_name}")
+                    final_state_data = node_state
+
     except Exception as e:
         logger.error("❌ Graph execution failed: %s", str(e))
         return {"status": "error", "error": str(e)}

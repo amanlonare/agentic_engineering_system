@@ -2,31 +2,28 @@
 
 # LLM Global Defaults
 llm:
-  provider: "bedrock"
-  default_model: "apac.anthropic.claude-sonnet-4-20250514-v1:0"
+  provider: "openai"
+  default_model: "gpt-4o-mini"
   default_temperature: 0.0
   max_retries: 5
-  region: "ap-northeast-1" 
+  region: "us-east-1" 
   thinking: false
   thinking_budget: 32000
-  # Agent-specific overrides
+  use_langfuse_prompts: true
+  # Agent-specific overrides (Simplified for quick testing)
   agents:
     planner:
-      provider: "bedrock"
-      model: "qwen.qwen3-next-80b-a3b"
-      temperature: 0.1
+      provider: "openai"
+      model: "gpt-4o-mini"
+      temperature: 0.0
     coder:
-      provider: "bedrock"
-      model: "apac.anthropic.claude-sonnet-4-20250514-v1:0"
+      provider: "openai"
+      model: "gpt-4o-mini"  # Slightly better for coding even in default mode
       temperature: 0.0
-      thinking: true
-      thinking_budget: 32000
     ops:
-      provider: "bedrock"
-      model: "apac.anthropic.claude-sonnet-4-20250514-v1:0"
+      provider: "openai"
+      model: "gpt-4o-mini"
       temperature: 0.0
-      thinking: true
-      thinking_budget: 16000
     growth:
       provider: "openai"
       model: "gpt-4o-mini"
@@ -48,7 +45,7 @@ agents:
 
 # Workflow Orchestration
 workflow:
-  max_rework_attempts: 3
+  max_rework_attempts: 1
   max_follow_up_depth: 2
 
 # Smart Context Manager Ingestion

@@ -1,4 +1,7 @@
-.PHONY: format lint clean ingest server install init-db reset-db run
+.PHONY: format lint clean ingest server install init-db reset-db run snyk-scan
+
+snyk-scan:
+	npx snyk code test
 
 server:
 	uv run python -m src.api.server

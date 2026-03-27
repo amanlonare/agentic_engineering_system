@@ -6,6 +6,7 @@ llm:
   default_model: "gpt-4o"
   default_temperature: 0.0
   max_retries: 5
+  use_langfuse_prompts: true
   agents:
     planner:
       model: "gpt-4o"

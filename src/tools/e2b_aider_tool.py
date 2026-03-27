@@ -1,7 +1,7 @@
 import os
 import re
 import shlex
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import httpcore
 from e2b import Sandbox, SandboxNotFoundException
@@ -213,6 +213,7 @@ async def run_aider_in_e2b(
     region: Optional[str] = None,
     thinking: bool = False,
     thinking_budget: int = 32000,
+    langfuse_prompt: Optional[Any] = None,
 ) -> dict:
     """
     Executes Aider inside an E2B sandbox to perform coding or verification tasks.
@@ -259,7 +260,7 @@ async def run_aider_in_e2b(
         aider_cmd = (
             f"aider --model {aider_model} --message {shlex.quote(final_instructions)} "
             "--yes --exit --no-attribute-author --no-attribute-committer "
-            "--no-attribute-co-authored-by --no-auto-commits"
+            "--no-attribute-co-authored-by --no-auto-commits --no-gitignore"
         )
 
         # Handle Thinking Mode (Claude 3.7 / Bedrock)

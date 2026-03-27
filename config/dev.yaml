@@ -1,18 +1,36 @@
 # 🛠️ Development Configuration
 # Overrides for local development and testing
 
+# 🛠️ Development Configuration (Testing for Good)
+# This environment uses high-fidelity models (Bedrock/Claude)
+
 llm:
-  provider: "openai"
-  default_model: "gpt-4o-mini"
-  default_temperature: 0.1 # Slightly more creative for dev
-  max_retries: 3           # Fewer retries to fail fast in dev
+  provider: "bedrock"
+  default_model: "apac.anthropic.claude-sonnet-4-20250514-v1:0"
+  default_temperature: 0.0
+  max_retries: 5
+  region: "ap-northeast-1" 
+  thinking: false
+  thinking_budget: 32000
+  use_langfuse_prompts: true
+  # Agent-specific overrides for high fidelity
   agents:
-    growth:
-      model: "gpt-4o-mini"
+    planner:
+      provider: "bedrock"
+      model: "qwen.qwen3-next-80b-a3b"
+      temperature: 0.1
+    coder:
+      provider: "bedrock"
+      model: "apac.anthropic.claude-sonnet-4-20250514-v1:0"
       temperature: 0.0
-    supervisor:
-      model: "gpt-4o-mini"
+      thinking: true
+      thinking_budget: 32000
+    ops:
+      provider: "bedrock"
+      model: "apac.anthropic.claude-sonnet-4-20250514-v1:0"
       temperature: 0.0
+      thinking: true
+      thinking_budget: 16000
 
 agents:
   coder:
