@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class TestCaseResult(BaseModel):
+    __test__ = False
     """The outcome of a single test case."""
 
     name: str = Field(description="Name or ID of the test case")
@@ -17,6 +18,7 @@ class TestCaseResult(BaseModel):
 
 
 class TestReport(BaseModel):
+    __test__ = False
     """Aggregated report of a test suite execution."""
 
     suite_name: str = Field(

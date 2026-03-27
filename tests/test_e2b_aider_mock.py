@@ -51,8 +51,10 @@ async def test_run_aider_in_e2b():
             fail_exc,  # 7. aider --version (run_aider_in_e2b)
             ok,  # 8. pip install (run_aider_in_e2b)
             ok,  # 9. aider run (run_aider_in_e2b)
-            ok,  # 10. git push (run_aider_in_e2b)
-            sha,  # 11. git rev-parse (run_aider_in_e2b)
+            ok,  # 10. git add . (NEW)
+            ok,  # 11. git commit (NEW)
+            ok,  # 12. git push (run_aider_in_e2b)
+            sha,  # 13. git rev-parse (run_aider_in_e2b)
         ]
         mock_sb.sandbox_id = "new_sb_123"
 
@@ -78,8 +80,10 @@ async def test_run_aider_in_e2b():
             ok,  # 4. git config name (_setup_git_identity)
             ok,  # 5. aider --version (run_aider_in_e2b)
             ok,  # 6. aider run (run_aider_in_e2b)
-            ok,  # 7. git push (run_aider_in_e2b)
-            sha,  # 8. git rev-parse (run_aider_in_e2b)
+            ok,  # 7. git add . (NEW)
+            ok,  # 8. git commit (NEW)
+            ok,  # 9. git push (run_aider_in_e2b)
+            sha,  # 10. git rev-parse (run_aider_in_e2b)
         ]
         mock_sb.sandbox_id = "existing_sb_456"
         mock_sandbox_class.connect.return_value = mock_sb
@@ -112,8 +116,10 @@ async def test_run_aider_in_e2b():
             ok,  # 5. git config name
             ok,  # 6. aider --version
             ok,  # 7. aider run
-            ok,  # 8. push
-            sha,  # 9. rev-parse
+            ok,  # 8. git add . (NEW)
+            ok,  # 9. git commit (NEW)
+            ok,  # 10. push
+            sha,  # 11. rev-parse
         ]
 
         result_3 = await run_aider_in_e2b(
