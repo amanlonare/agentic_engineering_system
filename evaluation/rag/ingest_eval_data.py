@@ -11,13 +11,14 @@ from src.core.config import settings
 
 import argparse
 
+
 async def ingest_eval(source_url: str | None = None):
     """
     Ingests data from YAML sources or a specific URL for evaluation.
     """
     from src.core.vector_store import VectorStore
     from src.core.graph_store import GraphStore
-    
+
     pipeline = IngestionPipeline(
         vector_store=VectorStore(
             db_path=settings.EVAL_CHROMA_DB_PATH,
@@ -45,14 +46,18 @@ async def ingest_eval(source_url: str | None = None):
             except Exception as e:
                 print(f"❌ Failed to ingest {source}: {e}")
                 import traceback
+
                 traceback.print_exc()
 
     finally:
         await pipeline.close()
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Ingest data for RAG evaluation.")
-    parser.add_argument("--url", type=str, help="Source URL to ingest (GitHub repo or Google Doc)")
+    parser.add_argument(
+        "--url", type=str, help="Source URL to ingest (GitHub repo or Google Doc)"
+    )
     args = parser.parse_args()
-    
+
     asyncio.run(ingest_eval(args.url))

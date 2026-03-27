@@ -1,6 +1,8 @@
 import os
-from e2b import Sandbox
+
 from dotenv import load_dotenv
+from e2b import Sandbox
+
 
 def cleanup_sandboxes():
     load_dotenv()
@@ -13,10 +15,10 @@ def cleanup_sandboxes():
     try:
         # In e2b 2.x, Sandbox.list() returns a paginator
         paginator = Sandbox.list()
-        
+
         # Get the first page of items
         items = paginator.next_items()
-        
+
         count = 0
         for sb in items:
             count += 1
@@ -34,12 +36,13 @@ def cleanup_sandboxes():
                 print(f"✅ Killed {sb.sandbox_id}")
             except Exception as e:
                 print(f"⚠️ Could not kill {sb.sandbox_id}: {e}")
-        
+
         if count == 0:
             print("✅ No active sandboxes found.")
 
     except Exception as e:
         print(f"❌ Error listing sandboxes: {e}")
+
 
 if __name__ == "__main__":
     cleanup_sandboxes()

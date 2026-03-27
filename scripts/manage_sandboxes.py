@@ -2,6 +2,7 @@ import os
 from e2b import Sandbox
 from dotenv import load_dotenv
 
+
 def cleanup_sandboxes():
     load_dotenv()
     api_key = os.getenv("E2B_API_KEY")
@@ -9,14 +10,14 @@ def cleanup_sandboxes():
         print("❌ E2B_API_KEY not found in .env")
         return
 
-    print(f"🔍 Fetching active sandboxes...")
+    print("🔍 Fetching active sandboxes...")
     paginator = Sandbox.list(api_key=api_key)
     sandboxes = []
     while True:
         sandboxes.extend(paginator.next_items())
         if not paginator.has_next:
             break
-    
+
     if not sandboxes:
         print("✅ No active sandboxes found.")
         return
@@ -29,6 +30,7 @@ def cleanup_sandboxes():
             print(f"✅ Killed {sb.sandbox_id}")
         except Exception as e:
             print(f"❌ Failed to kill {sb.sandbox_id}: {e}")
+
 
 if __name__ == "__main__":
     cleanup_sandboxes()
