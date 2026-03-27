@@ -36,15 +36,15 @@ class TestOpsDeterministic(unittest.IsolatedAsyncioTestCase):
 
     @patch("src.nodes.ops.config_manager.get_agent_llm")
     @patch("src.nodes.ops.run_aider_in_e2b")
-    @patch("src.nodes.ops.load_agent_persona")
-    @patch("src.nodes.ops.build_system_prompt")
+    @patch("src.nodes.ops.prompt_manager.get_prompt")
     async def test_ops_successful_verification(
-        self, mock_build_prompt, mock_load_persona, mock_run_aider, mock_get_agent_llm
+        self, mock_get_prompt, mock_run_aider, mock_get_agent_llm
     ):
 
         # 1. Setup Mocks
-        mock_load_persona.return_value = {"name": "ops", "system_prompt": "You are ops"}
-        mock_build_prompt.return_value = "System prompt"
+        mock_prompt = MagicMock()
+        mock_prompt.compile.return_value = "System prompt"
+        mock_get_prompt.return_value = mock_prompt
 
         # Mock aider result
         mock_run_aider.return_value = {

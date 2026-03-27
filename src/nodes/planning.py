@@ -6,11 +6,11 @@ from langchain_core.runnables import RunnableConfig
 from langfuse import observe
 
 from src.core.config_manager import app_config, config_manager
+from src.core.prompts import prompt_manager
 from src.core.state import EngineeringState
 from src.core.workspace import WorkspaceManager
 from src.schemas import ApprovalStatus, TechnicalPlan
 from src.tools.codebase_tools import get_restricted_tools, search_codebase
-from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.utils.logger import configure_logging
 
 logger = configure_logging("planning")
@@ -45,9 +45,9 @@ async def planning_node(
                 "ℹ️ Dynamic Discovery: No specific repository identified for general task."
             )
 
-    # 2. Load Persona
-    persona = load_agent_persona("planning")
-    system_prompt = build_system_prompt(persona).replace("{repo_name}", str(repo))
+    # 2. Fetch Prompt from PromptManager (Langfuse vs Local fallback)
+    lf_system_prompt = prompt_manager.get_prompt("planning-system")
+    system_prompt = lf_system_prompt.compile(repo_name=str(repo))
     if state.is_lightweight:
         system_prompt = (
             "THIS IS A LIGHTWEIGHT task. Follow the Lightweight Task Protocol.\n\n"
@@ -85,7 +85,15 @@ async def planning_node(
 
         while tool_call_count < MAX_TOOL_CALLS:
             response = await llm_with_tools.ainvoke(
-                messages, config={**config, "run_name": "Planner: Research Phase"}
+                messages,
+                config={
+                    **config,
+                    "run_name": "Planner: Research Phase",
+                    "metadata": {
+                        **config.get("metadata", {}),
+                        "langfuse_prompt": lf_system_prompt,
+                    },
+                },
             )
             messages.append(response)
 
@@ -144,40 +152,41 @@ async def planning_node(
             branch_name = state.branch_name
         else:
             slug_llm = config_manager.get_agent_llm("planning")
+            lf_slug_prompt = prompt_manager.get_prompt("planning-slug-extractor")
             slug_resp = await slug_llm.ainvoke(
                 [
                     HumanMessage(
-                        content=(
-                            f"Extract a concise 2-4 word kebab-case slug from the following task description "
-                            f"that captures the core technical action. Output ONLY the slug, nothing else. "
-                            f"Example: 'implement fibonacci' → 'fibonacci-series'. "
-                            f"Example: 'add user authentication to the backend api' → 'user-auth-api'. "
-                            f"Task: {task_description}"
+                        content=lf_slug_prompt.compile(
+                            task_description=task_description
                         )
                     )
                 ],
-                config=config,
+                config={
+                    **config,
+                    "metadata": {
+                        **config.get("metadata", {}),
+                        "langfuse_prompt": lf_slug_prompt,
+                    },
+                },
             )
             raw_slug = str(getattr(slug_resp, "content", slug_resp)).strip().lower()
             slug = re.sub(r"[^a-z0-9]+", "-", raw_slug).strip("-")[:35] or "task"
             branch_name = f"{app_config.system.branch_prefix}{slug}-{datetime.now().strftime('%m%d%H%M')}"
 
-        # Inject branch name and repo requirement into the final prompt
-        messages.append(
-            HumanMessage(
-                content=(
-                    f"Please generate the TechnicalPlan now.\n"
-                    f"IMPORTANT: Do NOT create steps for git branch creation, git commit, or git push — these are handled automatically.\n"
-                    f"IMPORTANT: For 'target_repo', use the full identifier '{repo}' (owner/repo) for all steps."
-                )
-            )
-        )
-
         logger.info(
             "📋 Generating structured TechnicalPlan with branch: %s", branch_name
         )
+        lf_plan_prompt = prompt_manager.get_prompt("planning-final-plan")
         final_plan: Any = await structured_llm.ainvoke(
-            messages, config={**config, "run_name": "Planner: Strategic Formulation"}
+            messages + [HumanMessage(content=lf_plan_prompt.compile(repo=repo))],
+            config={
+                **config,
+                "run_name": "Planner: Strategic Formulation",
+                "metadata": {
+                    **config.get("metadata", {}),
+                    "langfuse_prompt": lf_plan_prompt,
+                },
+            },
         )
 
         # Update the plan Markdown for the user

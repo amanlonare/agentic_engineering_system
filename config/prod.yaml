@@ -6,6 +6,7 @@ llm:
   default_model: "gpt-4o"
   default_temperature: 0.0
   max_retries: 10          # High retry limit for reliability
+  use_langfuse_prompts: true
   agents:
     planner:
       model: "gpt-4o"

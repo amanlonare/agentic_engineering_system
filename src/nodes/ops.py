@@ -6,11 +6,11 @@ from langchain_core.runnables.config import RunnableConfig
 from langfuse import observe
 
 from src.core.config_manager import config_manager
+from src.core.prompts import prompt_manager
 from src.core.resource_manager import ResourceManager
 from src.core.state import EngineeringState
 from src.schemas import StepExecutionRecord, StepStatus, TestReport
 from src.tools.e2b_aider_tool import kill_sandbox, run_aider_in_e2b
-from src.utils.config_loader import build_system_prompt, load_agent_persona
 from src.utils.logger import configure_logging
 
 logger = configure_logging("ops")
@@ -94,13 +94,15 @@ async def ops_node(
             )
     logger.info(f"🔒 Locking tools to repository: {repo}")
 
-    # 2. Setup Persona, LLM, and message context
-    persona = load_agent_persona("ops")
-    system_prompt = build_system_prompt(persona)
+    # 2. Setup Persona, LLM, and message context from PromptManager
+    lf_ops_system_prompt = prompt_manager.get_prompt("ops-system")
+    system_prompt = lf_ops_system_prompt.compile()
     llm = config_manager.get_agent_llm("ops")
 
     messages: List[BaseMessage] = [
-        SystemMessage(content=system_prompt),
+        SystemMessage(
+            content=system_prompt, metadata={"langfuse_prompt": lf_ops_system_prompt}
+        ),
         HumanMessage(content=instructions),
     ]
 
@@ -150,6 +152,7 @@ async def ops_node(
             region=ops_region,
             thinking=thinking,
             thinking_budget=thinking_budget,
+            langfuse_prompt=lf_ops_system_prompt,
         )
 
         if not aider_res["success"]:
@@ -159,13 +162,11 @@ async def ops_node(
         logger.info("📋 Finalizing structured TestReport from Aider output...")
         structured_llm = llm.with_structured_output(TestReport)
 
-        # We need to feed the Aider outcome back to the LLM to get a structured report
+        lf_diag_prompt = prompt_manager.get_prompt("ops-diagnostic-report")
         aider_outcome_msg = HumanMessage(
-            content=f"Aider finished the verification task. SUCCESS: {aider_res['success']}\n"
-            f"Sandboxed Aider logs (truncated if too long): {aider_res.get('logs', 'No logs returned')}\n\n"
-            "Analyze these results and generate the final structured TestReport. "
-            "Focus on actual test failures or dependency issues. Ignore noise from successful installations."
-            "If tests failed or critical deps couldn't be installed, succeed should be False."
+            content=lf_diag_prompt.compile(
+                success=aider_res["success"], logs=aider_res.get("logs", "No logs")
+            )
         )
         messages.append(aider_outcome_msg)
 
@@ -177,7 +178,14 @@ async def ops_node(
                 TestReport,
                 await structured_llm.ainvoke(
                     messages,
-                    config={**config, "run_name": "Ops: Diagnostic Formulation"},
+                    config={
+                        **config,
+                        "run_name": "Ops: Diagnostic Formulation",
+                        "metadata": {
+                            **config.get("metadata", {}),
+                            "langfuse_prompt": lf_diag_prompt,
+                        },
+                    },
                 ),
             )
 

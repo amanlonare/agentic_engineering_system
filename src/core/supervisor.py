@@ -3,6 +3,7 @@ The Chief Orchestrator routing logic. Determines the `next_action` in the workfl
 """
 
 import warnings
+from typing import Any, Dict
 
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import (
@@ -11,13 +12,14 @@ from langchain_core.prompts import (
     MessagesPlaceholder,
     SystemMessagePromptTemplate,
 )
-from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables import RunnableConfig, RunnableLambda
 from langfuse import observe
 
 from src.core.config_manager import app_config, config_manager
+from src.core.prompts import prompt_manager
 from src.core.state import EngineeringState, NodeName
 from src.core.workspace import WorkspaceManager
-from src.prompts.supervisor import SUPERVISOR_SYSTEM_PROMPT
+from src.prompts.supervisor import FEW_SHOT_EXAMPLES
 from src.schemas import GrowthRecommendationType, RouteDecision, StepStatus
 from src.utils.logger import configure_logging
 
@@ -180,19 +182,26 @@ async def _supervisor_node_impl(
         logger.info("👨‍💼 Supervisor decided next action (MOCK): %s", next_action)
         return {"next_action": next_action}
 
-    # Retrieve real-time org summary from Graph DB
-    workspace_manager = WorkspaceManager()
-    org_summary = workspace_manager.get_org_summary()
+    def _get_workspace_context(_: Dict[str, Any]) -> str:
+        summary = "No organization context available."
+        try:
+            wm = WorkspaceManager()
+            summary = wm.get_org_summary()
+        except Exception as e:
+            logger.warning("Could not retrieve graph summary: %s", e)
+        return summary
 
-    # Get GraphStore summary
-    try:
-        wm = WorkspaceManager()
-        _ = wm.get_org_summary()  # Call to ensure connectivity/warm-up
-    except Exception as e:
-        logger.warning("Could not retrieve graph summary: %s", e)
+    org_summary = await RunnableLambda(_get_workspace_context).ainvoke(
+        {}, config={**config, "run_name": "Supervisor: Workspace Analysis"}
+    )
 
-    system_prompt = SystemMessagePromptTemplate.from_template(SUPERVISOR_SYSTEM_PROMPT)
-    # We pass the full state context to help the supervisor route correctly
+    # Resolve prompts from PromptManager (Langfuse vs Local fallback)
+    lf_prompt = prompt_manager.get_prompt("supervisor-system")
+
+    # Use SystemMessagePromptTemplate for the base instructions
+    # We use .prompt string directly to ensure Langchain handles the variables
+    system_prompt = SystemMessagePromptTemplate.from_template(lf_prompt.prompt)
+
     human_prompt = HumanMessagePromptTemplate.from_template(
         "### WORKFLOW CONTEXT\n"
         "Current Trigger: {trigger_type}\n"
@@ -220,9 +229,11 @@ async def _supervisor_node_impl(
     )
 
     # Structured output guarantees mapping strictly to RouteDecision schema
-    chain = (prompt | llm.with_structured_output(RouteDecision)).with_config(
-        {"run_name": "Supervisor: Decision"}
-    )
+    llm = config_manager.get_agent_llm("supervisor")
+    structured_llm = llm.with_structured_output(RouteDecision)
+
+    # Create the chain with metadata for Langfuse prompt linking
+    chain = prompt | structured_llm
 
     try:
         # 1. Format Plan Checklist for the LLM
@@ -443,6 +454,7 @@ async def _supervisor_node_impl(
         # Explicitly invoke the chain
         result = await chain.ainvoke(
             {
+                "few_shot_examples": FEW_SHOT_EXAMPLES,
                 "org_summary": org_summary,
                 "trigger_type": state.trigger.type if state.trigger else "unknown",
                 "task_plan": plan_checklist if state.task_plan else "None",
@@ -460,7 +472,14 @@ async def _supervisor_node_impl(
                 "repo_name": state.trigger.repo_name if state.trigger else "General",
                 "messages": state.messages,
             },
-            config=config,
+            config={
+                **config,
+                "run_name": "Supervisor: Decision",
+                "metadata": {
+                    **config.get("metadata", {}),
+                    "langfuse_prompt": lf_prompt,
+                },
+            },
         )
 
         state_update = {}

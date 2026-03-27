@@ -24,15 +24,9 @@ def cleanup_sandboxes():
             count += 1
             print(f"Killing sandbox {count}: {sb.sandbox_id} ({sb.template_id})")
             try:
-                # Try killing or closing directly
-                if hasattr(sb, "kill"):
-                    sb.kill()
-                elif hasattr(sb, "close"):
-                    sb.close()
-                else:
-                    # Fallback to connect and kill
-                    s = Sandbox.connect(sb.sandbox_id)
-                    s.kill()
+                # We must use the static method with the sandbox_id because the
+                # SandboxInfo object returned from list() doesn't have kill() method.
+                Sandbox.kill(sb.sandbox_id)
                 print(f"✅ Killed {sb.sandbox_id}")
             except Exception as e:
                 print(f"⚠️ Could not kill {sb.sandbox_id}: {e}")

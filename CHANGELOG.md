@@ -1,5 +1,25 @@
 # Changelog
 
+## [2026-03-27]
+
+### Summary of Prompt Management Modernization & Supervisor Hardening
+Successfully modernized the agentic engineering system by centralizing prompt management with Langfuse, implementing a hybrid local/remote prompt strategy, and resolving runtime prompt variable mismatches. Optimized the system for token efficiency by capping rework attempts in the default environment and ensured robust version control for prompts. Hardened the supervisor node with explicit trace naming and few-shot variable resolution.
+
+### Added
+- **Hybrid Prompt Manager**: Introduced `src/core/prompts.py` to toggle between Langfuse-hosted prompts and local YAML/Python fallbacks via `USE_LANGFUSE_PROMPTS`.
+- **Manual Sync Utility**: Created `scripts/sync_prompts.py` to synchronize local templates with the Langfuse cloud environment.
+- **Trace Attribution**: Added explicit `run_name` metadata and `langfuse_prompt` linking to ensure 1:1 attribution between traces and prompt versions.
+
+### Modified
+- **Configuration Stage Swapping**: Updated `default.yaml` to use **GPT-4o-mini** and `dev.yaml` to use **Claude 3.5 Sonnet**, optimizing for speed and cost-efficiency.
+- **Rework Capping**: Unified `max_rework_attempts: 1` in `config/default.yaml` for routine testing optimization.
+- **Aider Integration**: Added `--no-gitignore` flag to `src/tools/e2b_aider_tool.py` to protect the project's `.gitignore` from automatic modifications.
+- **Supervisor Persona**: Refactored the supervisor to use raw string templates and explicitly pass `few_shot_examples` to resolve `INVALID_PROMPT_INPUT` errors.
+
+### Fixed
+- **Test Suite Regressions**: Resolved `TypeError` (AsyncMock mismatch) in `tests/test_webhook.py` and `AttributeError` (stale attribute patches) in `tests/test_ops_deterministic.py`.
+- **Trace Node Shadowing**: Eliminated `<unknown>` spans in the Supervisor's decision-making traces.
+
 ## [2026-03-26]
 
 ### Summary of Bedrock Multi-Region Stability & Execution Hardening

@@ -12,7 +12,7 @@ from src.core.config import settings
 
 # Mock out the singletons so tests are fast and isolated
 mock_workspace_manager = MagicMock()
-mock_workspace_manager.identify_repository.return_value = "owner/repo"
+mock_workspace_manager.identify_repository = AsyncMock(return_value="owner/repo")
 
 mock_graph = MagicMock()
 # Graph stream yields an iterator of dicts representing the node states
