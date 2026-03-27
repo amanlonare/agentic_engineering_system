@@ -1,5 +1,24 @@
 # Changelog
 
+## [2026-03-26]
+
+### Summary of Bedrock Multi-Region Stability & Execution Hardening
+Successfully stabilized the agentic system for **Amazon Bedrock inference profiles**, specifically targeting the Tokyo (`ap-northeast-1`) region using `apac.` regional IDs. Hardened the execution environment by resolving **sandbox isolation** (enabling Coder/Ops to share state) and **branch duplication** (replacing Aider's auto-branching with a clean AES commit strategy). This update ensures 100% git continuity and resource efficiency across complex multi-step tasks.
+
+### Added
+- **APAC Regional Support**: Whitelisted `apac.` and `jp.` prefixes for Bedrock models and reconfigured the system for Tokyo regional inference profiles.
+- **Manual Commit Protocol**: Added a manual git commit layer in `src/tools/e2b_aider_tool.py` using `--no-auto-commits`, preventing Aider from creating redundant `feature/` branches.
+
+### Modified
+- **Sandbox Reuse Logic**: Updated `src/nodes/ops.py` to pass the `sandbox_id` to verification tasks, enabling agents to interoperate within the same microVM.
+- **Claude 3.7 Thinking Integration**: Standardized the use of `thinking` blocks and `budget_tokens` configuration in the E2B aider tool.
+- **Config Management**: Updated `src/core/config_manager.py` to handle dynamic prefix stripping for Bedrock cross-region inference IDs.
+
+### Fixed
+- **Branch Duplication**: Resolved a race condition where Aider would create a parallel branch for task "staging," misaligning the local and remote repo states.
+- **Sandbox Redundancy**: Eliminated a bug where the `ops` node would spawn a fresh sandbox for every verification step, losing the Coder's build artifacts.
+- **Bedrock Connectivity**: Fixed model resolution errors for `anthropic.claude-3-7-sonnet-20250219-v1:0` when invoked via inference profiles.
+
 ## [2026-03-25]
 
 ### Summary of Persona-Driven Architecture & Verification Hardening

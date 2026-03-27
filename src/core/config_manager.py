@@ -17,6 +17,8 @@ class LLMAgentConfig(BaseModel):
     model: Optional[str] = None
     temperature: Optional[float] = None
     region: Optional[str] = None
+    thinking: bool = False
+    thinking_budget: int = 32000
 
 
 class LLMConfig(BaseModel):
@@ -25,6 +27,8 @@ class LLMConfig(BaseModel):
     default_temperature: float = 0.0
     max_retries: int = 5
     region: str = "us-east-1"
+    thinking: bool = False
+    thinking_budget: int = 32000
     agents: Dict[str, LLMAgentConfig] = {}
 
 
@@ -158,6 +162,47 @@ class ConfigManager:
             max_retries=llm_cfg.max_retries,
             api_key=api_key,
         )
+
+    def get_aider_model_id(self, agent_name: str) -> str:
+        """Get a model ID specifically formatted for Aider usage (e.g. bedrock/ prefix)."""
+        app_cfg: AppConfig = self.config
+        llm_cfg: LLMConfig = app_cfg.llm
+
+        agent_cfg = llm_cfg.agents.get(agent_name)
+        provider = (
+            agent_cfg.provider if agent_cfg and agent_cfg.provider else llm_cfg.provider
+        )
+        model = (
+            agent_cfg.model if agent_cfg and agent_cfg.model else llm_cfg.default_model
+        )
+
+        if provider == "bedrock":
+            # For Bedrock models, Aider expects the raw model ID.
+            # We allow regional prefixes (us., global., apac., jp.) to pass through
+            # as they are required for cross-region and regional inference profiles.
+            return f"bedrock/{model}"
+
+        return model
+
+    def get_agent_region(self, agent_name: str) -> str:
+        """Resolve the AWS region for a specific agent, falling back to global defaults."""
+        app_cfg: AppConfig = self.config
+        llm_cfg: LLMConfig = app_cfg.llm
+        return llm_cfg.region or "us-east-1"
+
+    def get_agent_thinking(self, agent_name: str) -> bool:
+        """Resolve if thinking mode is enabled for a specific agent."""
+        app_cfg: AppConfig = self.config
+        llm_cfg: LLMConfig = app_cfg.llm
+        agent_cfg = llm_cfg.agents.get(agent_name)
+        return agent_cfg.thinking if agent_cfg else llm_cfg.thinking
+
+    def get_agent_thinking_budget(self, agent_name: str) -> int:
+        """Resolve the thinking budget for a specific agent."""
+        app_cfg: AppConfig = self.config
+        llm_cfg: LLMConfig = app_cfg.llm
+        agent_cfg = llm_cfg.agents.get(agent_name)
+        return agent_cfg.thinking_budget if agent_cfg else llm_cfg.thinking_budget
 
 
 # Global configuration object

@@ -3,6 +3,7 @@ from typing import Any, Dict, List, cast
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables.config import RunnableConfig
+from langfuse import observe
 
 from src.core.config_manager import config_manager
 from src.core.resource_manager import ResourceManager
@@ -16,7 +17,10 @@ logger = configure_logging("ops")
 resource_manager = ResourceManager()
 
 
-async def ops_node(state: EngineeringState, config: RunnableConfig) -> Dict[str, Any]:
+@observe(name="Agent: Verification & Ops")
+async def ops_node(
+    state: EngineeringState, config: RunnableConfig, **kwargs
+) -> Dict[str, Any]:
     """
     Ops Agent: Verifies code changes and deployment.
     """
@@ -126,16 +130,26 @@ async def ops_node(state: EngineeringState, config: RunnableConfig) -> Dict[str,
         repo_name = state.trigger.repo_name if state.trigger else ""
         repo_url = f"https://github.com/{repo_name}.git" if repo_name else ""
 
+        # Resolve Aider model, region, and thinking
+        ops_model = config_manager.get_aider_model_id("ops")
+        ops_region = config_manager.get_agent_region("ops")
+        thinking = config_manager.get_agent_thinking("ops")
+        thinking_budget = config_manager.get_agent_thinking_budget("ops")
+
         aider_res = await run_aider_in_e2b(
             repo_url=repo_url,
             instructions=aider_instructions,
             fnames=[],  # Ops usually doesn't need to specify files to edit
             branch=state.branch_name,
+            model=ops_model,
             sandbox_id=state.sandbox_id,
             run_only=True,
             skip_push=skip_push and not is_last_step,
             is_env_rework=state.is_env_rework,
             system_prompt=system_prompt,
+            region=ops_region,
+            thinking=thinking,
+            thinking_budget=thinking_budget,
         )
 
         if not aider_res["success"]:
@@ -148,10 +162,12 @@ async def ops_node(state: EngineeringState, config: RunnableConfig) -> Dict[str,
         # We need to feed the Aider outcome back to the LLM to get a structured report
         aider_outcome_msg = HumanMessage(
             content=f"Aider finished the verification task. SUCCESS: {aider_res['success']}\n"
-            f"Sandboxed Aider logs: {aider_res.get('logs', 'No logs returned')}\n\n"
+            f"Sandboxed Aider logs (truncated if too long): {aider_res.get('logs', 'No logs returned')}\n\n"
             "Analyze these results and generate the final structured TestReport. "
-            "If tests failed or deps couldn't be installed, succeed should be False."
+            "Focus on actual test failures or dependency issues. Ignore noise from successful installations."
+            "If tests failed or critical deps couldn't be installed, succeed should be False."
         )
+        messages.append(aider_outcome_msg)
 
         with warnings.catch_warnings():
             warnings.filterwarnings(
@@ -160,12 +176,8 @@ async def ops_node(state: EngineeringState, config: RunnableConfig) -> Dict[str,
             report = cast(
                 TestReport,
                 await structured_llm.ainvoke(
-                    [
-                        SystemMessage(content=system_prompt),
-                        HumanMessage(content=instructions),
-                        aider_outcome_msg,
-                    ],
-                    config=config,
+                    messages,
+                    config={**config, "run_name": "Ops: Diagnostic Formulation"},
                 ),
             )
 

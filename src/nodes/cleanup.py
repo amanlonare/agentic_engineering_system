@@ -1,5 +1,8 @@
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+
+from langchain_core.runnables.config import RunnableConfig
+from langfuse import observe
 
 from src.core.config_manager import app_config
 from src.core.state import EngineeringState
@@ -8,7 +11,10 @@ from src.utils.logger import configure_logging
 logger = configure_logging("cleanup")
 
 
-async def cleanup_node(state: EngineeringState) -> Dict[str, Any]:
+@observe(name="Agent: Resource Cleanup")
+async def cleanup_node(
+    state: EngineeringState, config: Optional[RunnableConfig] = None
+) -> Dict[str, Any]:
     """
     Cleanup Node: Removes transient artifacts like task plans and temporary clones.
     """
@@ -54,6 +60,13 @@ async def cleanup_node(state: EngineeringState) -> Dict[str, Any]:
                 sb.kill()
             logger.info("🔒 Closed E2B Sandbox: %s", state.sandbox_id)
         except Exception as e:
-            logger.warning("Failed to close E2B sandbox %s: %s", state.sandbox_id, e)
+            # Check for common async mismatch warnings in the string representation
+            err_msg = str(e)
+            if "cancel scope" in err_msg or "Context" in err_msg:
+                logger.info("ℹ️ Sandbox cleanup handled: %s", err_msg)
+            else:
+                logger.warning(
+                    "Failed to close E2B sandbox %s: %s", state.sandbox_id, e
+                )
 
     return {"sandbox_id": None}

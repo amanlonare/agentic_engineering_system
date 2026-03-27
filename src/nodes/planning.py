@@ -3,6 +3,7 @@ from typing import Any, Dict
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
+from langfuse import observe
 
 from src.core.config_manager import app_config, config_manager
 from src.core.state import EngineeringState
@@ -18,8 +19,9 @@ logger = configure_logging("planning")
 workspace_manager = WorkspaceManager()
 
 
+@observe(name="Agent: Planning & Strategy")
 async def planning_node(
-    state: EngineeringState, config: RunnableConfig
+    state: EngineeringState, config: RunnableConfig, **kwargs
 ) -> Dict[str, Any]:
     """
     Planning Agent: Designs technical implementation plans.
@@ -82,7 +84,9 @@ async def planning_node(
         MAX_TOOL_CALLS = 10
 
         while tool_call_count < MAX_TOOL_CALLS:
-            response = await llm_with_tools.ainvoke(messages, config=config)
+            response = await llm_with_tools.ainvoke(
+                messages, config={**config, "run_name": "Planner: Research Phase"}
+            )
             messages.append(response)
 
             if not getattr(response, "tool_calls", None):
@@ -172,45 +176,41 @@ async def planning_node(
         logger.info(
             "📋 Generating structured TechnicalPlan with branch: %s", branch_name
         )
-        plan: Any = await structured_llm.ainvoke(messages, config=config)
+        final_plan: Any = await structured_llm.ainvoke(
+            messages, config={**config, "run_name": "Planner: Strategic Formulation"}
+        )
 
         # Update the plan Markdown for the user
-        plan_md = f"# Technical Plan: {plan.title}\n\n"
-        plan_md += f"**Risk Assessment:** {plan.estimated_risk} | **Branch:** `{branch_name}`\n\n"
+        plan_md = f"# Technical Plan: {final_plan.title}\n\n"
+        plan_md += f"**Risk Assessment:** {final_plan.estimated_risk} | **Branch:** `{branch_name}`\n\n"
         plan_md += "## Summary\n"
-        plan_md += f"{plan.summary}\n\n"
+        plan_md += f"{final_plan.summary}\n\n"
         plan_md += "## Execution Steps\n\n"
-        for step in plan.steps:
+        for step in final_plan.steps:
             plan_md += f"### {step.id}: {step.description}\n"
-            plan_md += f"- **Assignee:** {step.assigned_to}\n"
-            if step.dependencies:
-                plan_md += f"- **Dependencies:** {', '.join(step.dependencies)}\n"
-            plan_md += f"- **Verification:** `{step.verification_criteria}`\n\n"
+            plan_md += f"**Assigned to:** {step.assigned_to}\n"
+            if step.verification_criteria:
+                plan_md += f"**Verification:** {step.verification_criteria}\n"
+            plan_md += "\n"
 
-        # Step 4: Persist the plan locally for debugging/reference (avoids repo clutter)
+        # 5. Persist the plan locally for debugging/reference (avoids repo clutter)
         from pathlib import Path
 
-        # Get thread_id from state if available, or generate a fallback
         thread_id = (
-            state.trigger.payload.get("thread_id", "unknown")
+            state.trigger.payload.get("thread_id", "manual")
             if state.trigger and hasattr(state.trigger, "payload")
             else "manual-task"
         )
-
         storage_base = Path(app_config.system.plan_storage_base)
         plan_filename = f"task_{thread_id}.md"
         plan_path = storage_base / plan_filename
 
         try:
-            # Ensure the storage directory exists
             storage_base.mkdir(parents=True, exist_ok=True)
-
-            # Add a header with metadata
             header = f"<!-- THREAD_ID: {thread_id} | REPO: {repo} | DATE: {datetime.now().isoformat()} -->\n\n"
             final_file_content = f"{header}{plan_md}"
-
             plan_path.write_text(final_file_content, encoding="utf-8")
-            logger.info(f"✅ Technical Plan persisted to {plan_path} (AES Local)")
+            logger.info(f"✅ Technical Plan persisted to {plan_path}")
 
             content = (
                 f"### 📋 Technical Plan Generated\n"
@@ -223,11 +223,13 @@ async def planning_node(
                 f"### 📋 Technical Plan Generated (Persistence Failed)\n\n{plan_md}"
             )
 
+        # 6. Store in state and return
         return {
             "messages": [AIMessage(content=content)],
-            "task_plan": plan,
+            "task_plan": final_plan,
             "branch_name": branch_name,
             "approval_status": ApprovalStatus.APPROVED,
+            "active_step_id": final_plan.steps[0].id if final_plan.steps else None,
             "trigger": (
                 state.trigger.model_copy(update={"repo_name": repo})
                 if state.trigger
