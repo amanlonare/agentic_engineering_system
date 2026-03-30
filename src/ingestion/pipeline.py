@@ -86,7 +86,12 @@ class IngestionPipeline:
             )
         return mapping[source_type]
 
-    async def process(self, source_url: str) -> List[Chunk]:
+    async def process(
+        self,
+        source_url: str,
+        github_token: Optional[str] = None,
+        google_service_account_json: Optional[str] = None,
+    ) -> List[Chunk]:
         """
         End-to-end processing pipeline:
         1. Identify the source.
@@ -102,7 +107,9 @@ class IngestionPipeline:
             )
 
         # Step 2: Fetch
-        raw_content = await self.fetcher.fetch(identified_source)
+        raw_content = await self.fetcher.fetch(
+            identified_source, github_token, google_service_account_json
+        )
 
         # Step 3: Chunk
         repo_name = "Other Sources"  # Default fallback

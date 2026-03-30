@@ -23,22 +23,23 @@ resource_manager = ResourceManager()
 async def _get_repo_url(repo_name: str) -> str:
     """Resolves a repository name to its remote URL via GraphStore."""
     gs = GraphStore()
+    # Check for exact match OR clean suffix match (e.g. /repo_name)
     results = gs.execute_query(
-        "MATCH (r:Repository) WHERE r.name ENDS WITH $name RETURN r.remote_url LIMIT 1",
-        {"name": repo_name if repo_name.startswith("/") else f"/{repo_name}"},
+        "MATCH (r:Repository) WHERE r.name = $name OR r.name ENDS WITH $suffix RETURN r.remote_url LIMIT 1",
+        {
+            "name": repo_name,
+            "suffix": f"/{repo_name.split('/')[-1]}"
+        },
     )
     if results and results[0] and results[0][0]:
         return results[0][0]
 
-    # Fallback logic: if it looks like a full repo name (owner/repo), use it.
-    # Otherwise, log a warning and use the base github URL.
-    candidate = repo_name
-    if "/" not in candidate:
-        logger.warning(
-            "⚠️ Partial repo name '%s' passed. No owner found. Guessing...", repo_name
-        )
-
-    return f"https://github.com/{candidate}"  # Guessing the full path
+    # STALENESS PREVENTION: Do not guess Github URLs. 
+    # If the repo isn't in the GraphStore, the system shouldn't try a random URL.
+    raise ValueError(
+        f"Repository '{repo_name}' is not currently indexed in the GraphStore. "
+        "Please ensure the repository is added to 'ingestion_sources.yaml' and you have run 'Ingest All'."
+    )
 
 
 @observe(name="Agent: Coder")
@@ -83,6 +84,7 @@ async def coder_node(
         else "unknown"
     )
     repo_url = await _get_repo_url(repo_name)
+    logger.info("🎯 Implementation Target: %s in repository '%s'", current_step.id, repo_name)
 
     # 2. Prepare Aider Instructions
     # Combine the step description with orchestrator feedback
@@ -90,6 +92,7 @@ async def coder_node(
     instructions = (
         f"Goal: {current_step.description}\n\nAdditional Context/Feedback: {last_msg}"
     )
+    logger.info("📝 Aider Instructions: %s", current_step.description)
 
     # 3. Handle Branching
     if not state.branch_name:
@@ -132,7 +135,7 @@ async def coder_node(
         fnames=[],  # Aider will discover files automatically
         branch=branch_name,
         base_branch=app_config.system.default_branch or "main",
-        model=coder_model or "gpt-4o",
+        model=coder_model or "gpt-4o-mini",
         sandbox_id=state.sandbox_id,
         system_prompt=system_prompt,
         region=coder_region,

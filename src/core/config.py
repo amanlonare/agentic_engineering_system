@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     GOOGLE_SERVICE_ACCOUNT_JSON_PATH: str | None = Field(
         default="secrets/google_service_account_cred.json", repr=False
     )
+    GOOGLE_SERVICE_ACCOUNT_JSON: str | None = Field(default=None, repr=False)
     SLACK_BOT_TOKEN: str | None = Field(default=None, repr=False)
 
     APP_ENV: str = "dev"

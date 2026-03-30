@@ -1,4 +1,5 @@
-from typing import Optional
+from asyncio import sleep, run
+from typing import Optional, List, Dict, Any
 
 from src.core.memory import LongTermMemory
 from src.utils.logger import configure_logging
@@ -87,6 +88,7 @@ class WorkspaceManager:
 
             return "\n".join(summary_lines).strip()
         except Exception as e:
+            # We catch top-level exceptions to prevent Graph DB failures from halting the supervisor
             logger.error("Failed to retrieve org summary: %s", e)
             return "Organization repositories currently unavailable."
 
@@ -148,14 +150,59 @@ class WorkspaceManager:
                 logger.info("🎯 Identified repository (String Match): %s", r)
                 return r
 
-        logger.warning("Could not identify a relevant repository for task.")
-        return None
+    def is_ingested(self) -> bool:
+        """
+        Checks if the organization context is already ingested.
+        Returns True if at least one Source node exists in GraphStore.
+        This is the most reliable indicator as all repos/docs are under a Source.
+        """
+        try:
+            # Query the count of all Source nodes
+            q = "MATCH (n:Source) RETURN count(n) as total_count"
+            results = self.graph_store.execute_query(q)
+            
+            if results and int(results[0][0]) > 0:
+                count = int(results[0][0])
+                logger.info(f"✅ Organization context is already ingested (Found {count} Source nodes).")
+                return True
+                
+            logger.info("⚠️ Organization context is NOT ingested.")
+            return False
+        except Exception as e:
+            logger.error(f"Failed to check ingestion status: {e}")
+            return False
 
+    async def bulk_ingest(
+        self,
+        sources: list,
+        github_token: Optional[str] = None,
+        google_service_account_json: Optional[str] = None,
+    ) -> None:
+        """
+        Indexes multiple sources into GraphStore and Vector memory using IngestionPipeline.
+        """
+        from src.ingestion.pipeline import IngestionPipeline
+
+        logger.info("🚀 Starting real-time bulk ingestion of %d sources...", len(sources))
+        pipeline = IngestionPipeline()
+
+        try:
+            for source in sources:
+                url = source.get("url")
+                stype = source.get("type")
+                logger.info("📦 Processing %s: %s", stype, url)
+                try:
+                    chunks = await pipeline.process(
+                        url, github_token, google_service_account_json
+                    )
+                    logger.info("✅ Successfully indexed %d chunks for %s", len(chunks), url)
+                except Exception as e:
+                    logger.error("❌ Failed to ingest %s: %s", url, e)
+        finally:
+            await pipeline.close()
+            logger.info("✨ Bulk ingestion process completed.")
 
 if __name__ == "__main__":
-    # Test discovery
-    import asyncio
-
     wm = WorkspaceManager()
 
     test_tasks = [
@@ -170,4 +217,4 @@ if __name__ == "__main__":
             repo = await wm.identify_repository(task)
             print(f"Task: '{task}' -> Repo: {repo}")
 
-    asyncio.run(run_tests())
+    run(run_tests())

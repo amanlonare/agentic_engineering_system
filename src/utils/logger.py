@@ -1,5 +1,12 @@
+import asyncio
 import logging
 import sys
+from contextvars import ContextVar
+from typing import List, Optional
+
+
+# Global ContextVar to store logs for the current request context (thread-safe for async)
+ui_log_queue: ContextVar[Optional[asyncio.Queue]] = ContextVar("ui_log_queue", default=None)
 
 
 class ColoredFormatter(logging.Formatter):
@@ -34,7 +41,19 @@ class ColoredFormatter(logging.Formatter):
             f"{color}%(name)-12s{self.RESET} | %(message)s"
         )
         formatter = logging.Formatter(format_str, datefmt="%Y-%m-%d %H:%M:%S")
-        return formatter.format(record)
+        formatted_msg = formatter.format(record)
+
+        # Push to UI queue if active
+        queue = ui_log_queue.get()
+        if queue:
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.call_soon_threadsafe(queue.put_nowait, formatted_msg)
+            except Exception:
+                pass
+
+        return formatted_msg
 
 
 def configure_logging(name: str = "system"):

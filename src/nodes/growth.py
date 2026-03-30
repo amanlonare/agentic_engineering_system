@@ -47,7 +47,7 @@ async def growth_node(
     # Inject repo context manually since build_system_prompt doesn't take it
     system_prompt = f"{system_prompt}\n\nTarget Repository Context: {repo}"
 
-    llm = config_manager.get_agent_llm("growth")
+    llm = config_manager.get_agent_llm("growth", config=config)
     llm_with_tools = llm.bind_tools(all_tools)
 
     # 2. Prepare Messages

@@ -173,7 +173,7 @@ async def _supervisor_node_impl(
         )
         return {"next_action": NodeName.FINISH}
 
-    llm = config_manager.get_agent_llm("supervisor")
+    llm = config_manager.get_agent_llm("supervisor", config=config)
 
     if not llm:
         # Mock logic to test routing: If no messages from agents yet, go to planning.
@@ -229,7 +229,7 @@ async def _supervisor_node_impl(
     )
 
     # Structured output guarantees mapping strictly to RouteDecision schema
-    llm = config_manager.get_agent_llm("supervisor")
+    llm = config_manager.get_agent_llm("supervisor", config=config)
     structured_llm = llm.with_structured_output(RouteDecision)
 
     # Create the chain with metadata for Langfuse prompt linking

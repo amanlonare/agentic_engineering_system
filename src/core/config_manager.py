@@ -2,8 +2,10 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import yaml
+import boto3
 from langchain_aws import ChatBedrockConverse
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.runnables import RunnableConfig
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, SecretStr
 
@@ -106,7 +108,9 @@ class ConfigManager:
 
         self.config = AppConfig(**config_dict)
 
-    def get_agent_llm(self, agent_name: str) -> BaseChatModel:
+    def get_agent_llm(
+        self, agent_name: str, config: Optional[RunnableConfig] = None
+    ) -> BaseChatModel:
         """Get a configured LangChain ChatModel (OpenAI or Bedrock) for an agent."""
         from src.core.config import settings
 
@@ -115,46 +119,66 @@ class ConfigManager:
 
         agent_cfg = llm_cfg.agents.get(agent_name)
 
-        # Resolve provider
+        # 1. Resolve Overrides from RunnableConfig (Session-specific)
+        configurable = config.get("configurable", {}) if config else {}
+        override_provider = configurable.get("llm_provider")
+        override_model = configurable.get("llm_model")
+        override_api_key = configurable.get("openai_api_key")
+        override_aws_key = configurable.get("aws_access_key_id")
+        override_aws_secret = configurable.get("aws_secret_access_key")
+        override_aws_region = configurable.get("aws_region")
+
+        # 2. Resolve final Provider/Model
         provider = (
-            agent_cfg.provider if agent_cfg and agent_cfg.provider else llm_cfg.provider
-        )
+            override_provider
+            or (agent_cfg.provider if agent_cfg and agent_cfg.provider else llm_cfg.provider)
+        ).lower()
 
-        # Resolve model
         model = (
-            agent_cfg.model if agent_cfg and agent_cfg.model else llm_cfg.default_model
+            override_model
+            or (agent_cfg.model if agent_cfg and agent_cfg.model else llm_cfg.default_model)
         )
 
-        # Resolve temperature
         temp = (
             agent_cfg.temperature
             if agent_cfg and agent_cfg.temperature is not None
             else llm_cfg.default_temperature
         )
 
-        # Provider-specific initialization
+        # 3. Provider-specific initialization
         if provider == "bedrock":
-            region = (
+            region = override_aws_region or (
                 agent_cfg.region if agent_cfg and agent_cfg.region else llm_cfg.region
             )
             logger.info(
                 f"🤖 [Agent: {agent_name}] -> [Provider: bedrock] | "
                 f"[Model: {model}] | [Region: {region}]"
             )
-            return ChatBedrockConverse(
-                model=model,
-                temperature=temp,
-                region_name=region,
-                # Bedrock handles retries via botocore, parameter not supported here
-            )
+
+            # If custom credentials provided, create a specific session
+            bedrock_kwargs = {
+                "model": model,
+                "temperature": temp,
+                "region_name": region,
+            }
+
+            if override_aws_key and override_aws_secret:
+                logger.info("🔑 Using session-specific AWS credentials for Bedrock.")
+                session = boto3.Session(
+                    aws_access_key_id=override_aws_key,
+                    aws_secret_access_key=override_aws_secret.get_secret_value() if isinstance(override_aws_secret, SecretStr) else override_aws_secret,
+                    region_name=region,
+                )
+                bedrock_kwargs["client"] = session.client("bedrock-runtime")
+
+            return ChatBedrockConverse(**bedrock_kwargs)
 
         # Default to OpenAI
         logger.info(
             f"🤖 [Agent: {agent_name}] -> [Provider: openai] | [Model: {model}]"
         )
-        api_key = (
-            SecretStr(settings.OPENAI_API_KEY) if settings.OPENAI_API_KEY else None
-        )
+        api_key_val = override_api_key or settings.OPENAI_API_KEY
+        api_key = SecretStr(api_key_val) if api_key_val else None
 
         return ChatOpenAI(
             model=model,

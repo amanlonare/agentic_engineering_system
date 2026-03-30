@@ -1,5 +1,7 @@
+import json
 import logging
 import os
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -67,14 +69,31 @@ class MCPClientManager:
             # Some MCP servers use GITHUB_PERSONAL_ACCESS_TOKEN
             full_env["GITHUB_PERSONAL_ACCESS_TOKEN"] = settings.GITHUB_TOKEN
 
-        if name == "gdrive" and settings.GOOGLE_SERVICE_ACCOUNT_JSON_PATH:
-            key_path = Path(settings.GOOGLE_SERVICE_ACCOUNT_JSON_PATH)
-            if not key_path.is_absolute():
-                key_path = Path.cwd().joinpath(key_path)
-            full_env["GOOGLE_APPLICATION_CREDENTIALS"] = str(key_path)
-            full_env["GOOGLE_SERVICE_ACCOUNT_PATH"] = str(key_path)
-            full_env["SERVICE_ACCOUNT_PATH"] = str(key_path)
-            logger.info(f"Injected Google credentials from {key_path}")
+        if name == "gdrive":
+            key_path = None
+            # Priority 1: Ephemeral JSON string from UI (via settings)
+            if settings.GOOGLE_SERVICE_ACCOUNT_JSON:
+                try:
+                    # Create a temporary file that exists only for this connection's duration
+                    fd, path = tempfile.mkstemp(suffix=".json", prefix="aes_gdrive_")
+                    with os.fdopen(fd, 'w') as f:
+                        f.write(settings.GOOGLE_SERVICE_ACCOUNT_JSON)
+                    key_path = Path(path)
+                    logger.info("🔑 Injected ephemeral Google Service Account JSON from memory.")
+                except Exception as e:
+                    logger.error(f"Failed to create temp file for Google credentials: {e}")
+
+            # Priority 2: Standard file path from .env
+            elif settings.GOOGLE_SERVICE_ACCOUNT_JSON_PATH:
+                key_path = Path(settings.GOOGLE_SERVICE_ACCOUNT_JSON_PATH)
+                if not key_path.is_absolute():
+                    key_path = Path.cwd().joinpath(key_path)
+
+            if key_path:
+                full_env["GOOGLE_APPLICATION_CREDENTIALS"] = str(key_path)
+                full_env["GOOGLE_SERVICE_ACCOUNT_PATH"] = str(key_path)
+                full_env["SERVICE_ACCOUNT_PATH"] = str(key_path)
+                logger.info(f"Injected Google credentials from {key_path}")
 
         logger.info(
             f"Connecting to Stdio MCP '{name}' with command: {command} {' '.join(args)}"

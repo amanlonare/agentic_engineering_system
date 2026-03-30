@@ -97,7 +97,7 @@ async def ops_node(
     # 2. Setup Persona, LLM, and message context from PromptManager
     lf_ops_system_prompt = prompt_manager.get_prompt("ops-system")
     system_prompt = lf_ops_system_prompt.compile()
-    llm = config_manager.get_agent_llm("ops")
+    llm = config_manager.get_agent_llm("ops", config=config)
 
     messages: List[BaseMessage] = [
         SystemMessage(

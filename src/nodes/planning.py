@@ -55,7 +55,7 @@ async def planning_node(
         )
 
     # 3. Setup LLM and tools
-    llm = config_manager.get_agent_llm("planner")
+    llm = config_manager.get_agent_llm("planner", config=config)
 
     # Use repo-scoped tools, filter out write_file since planner doesn't write code
     restricted_tools = get_restricted_tools(str(repo))
@@ -151,7 +151,7 @@ async def planning_node(
         if state.branch_name:
             branch_name = state.branch_name
         else:
-            slug_llm = config_manager.get_agent_llm("planning")
+            slug_llm = config_manager.get_agent_llm("planning", config=config)
             lf_slug_prompt = prompt_manager.get_prompt("planning-slug-extractor")
             slug_resp = await slug_llm.ainvoke(
                 [
@@ -220,6 +220,10 @@ async def planning_node(
             final_file_content = f"{header}{plan_md}"
             plan_path.write_text(final_file_content, encoding="utf-8")
             logger.info(f"✅ Technical Plan persisted to {plan_path}")
+
+            # Stream the plan to the UI console in real-time with clear separators
+            separator = "=" * 80
+            logger.info(f"\n{separator}\n📋 TECHNICAL PLAN GENERATED\n{separator}\n{plan_md}\n{separator}\n")
 
             content = (
                 f"### 📋 Technical Plan Generated\n"

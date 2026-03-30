@@ -95,11 +95,19 @@ ingestion_sources.yaml
 
 # skills and plans
 .agents/
+.agent/
 .claude/
 .planning/
 
-# agent
+# aider
 aider/
+.aider*
+**/.aider*
 
 # observability
 langfuse_trace
+
+# memory and databases
+long_term_memory/
+*.kuzu
+*.sqlite3

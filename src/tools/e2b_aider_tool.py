@@ -24,6 +24,7 @@ async def get_sandbox(
     repo_url: Optional[str] = None,
     sandbox_id: Optional[str] = None,
     e2b_api_key: Optional[str] = None,
+    github_token: Optional[str] = None,
 ) -> tuple[Sandbox, str]:
     """
     Initialize or connect to a sandbox and clone the repo if needed.
@@ -45,9 +46,9 @@ async def get_sandbox(
 
     repo_path = "/home/user/repo"
     if repo_url:
-        github_token = settings.GITHUB_TOKEN
-        if "github.com" in repo_url and github_token and github_token not in repo_url:
-            repo_url = repo_url.replace("https://", f"https://{github_token}@")
+        token = github_token or settings.GITHUB_TOKEN
+        if "github.com" in repo_url and token and token not in repo_url:
+            repo_url = repo_url.replace("https://", f"https://{token}@")
 
         try:
             sb.commands.run(f"test -d {repo_path}")
@@ -93,13 +94,18 @@ def clean_and_truncate_logs(text: str, max_lines: int = 1500) -> str:
 
 
 def _print_stream(output) -> None:
-    """Callback to print sandbox output in real-time. Works for both strings and objects."""
+    """
+    Pipes sandbox stdout/stderr through the system logger so it appears in the UI stream.
+    We strip trailing whitespace to maintain clean logs in the console.
+    """
+    content = ""
     if isinstance(output, str):
-        print(output, end="", flush=True)
+        content = output
     else:
-        # Fallback for structured objects with .stdout or .line
         content = getattr(output, "stdout", getattr(output, "line", str(output)))
-        print(content, end="", flush=True)
+
+    if content.strip():
+        logger.info(f" 📦 [Sandbox] {content.strip()}")
 
 
 def _build_default_env() -> dict:
@@ -139,13 +145,15 @@ async def run_command_in_e2b(
     cwd: Optional[str] = None,
     env: Optional[dict] = None,
     region: Optional[str] = None,
+    github_token: Optional[str] = None,
+    openai_api_key: Optional[str] = None,
 ) -> dict:
     """
     Executes a generic shell command inside an E2B sandbox.
     Credentials (GITHUB_TOKEN, API keys) are injected by default.
     """
     try:
-        sb, base_repo_path = await get_sandbox(repo_url, sandbox_id)
+        sb, base_repo_path = await get_sandbox(repo_url, sandbox_id, github_token=github_token)
         repo_path = os.path.join(base_repo_path, cwd) if cwd else base_repo_path
 
         if cwd:
@@ -204,7 +212,7 @@ async def run_aider_in_e2b(
     fnames: Optional[List[str]] = None,
     branch: Optional[str] = None,
     base_branch: Optional[str] = "main",
-    model: Optional[str] = "gpt-4o",
+    model: Optional[str] = "gpt-4o-mini",
     sandbox_id: Optional[str] = None,
     run_only: bool = False,
     skip_push: bool = False,
@@ -213,6 +221,10 @@ async def run_aider_in_e2b(
     region: Optional[str] = None,
     thinking: bool = False,
     thinking_budget: int = 32000,
+    github_token: Optional[str] = None,
+    openai_api_key: Optional[str] = None,
+    aws_access_key_id: Optional[str] = None,
+    aws_secret_access_key: Optional[str] = None,
     langfuse_prompt: Optional[Any] = None,
 ) -> dict:
     """
@@ -225,7 +237,7 @@ async def run_aider_in_e2b(
             "%s E2B sandbox %s (id: %s)...", action, log_mode, sandbox_id or "new"
         )
 
-        sb, repo_path = await get_sandbox(repo_url, sandbox_id)
+        sb, repo_path = await get_sandbox(repo_url, sandbox_id, github_token=github_token)
 
         # Setup Branch
         if branch:
@@ -256,11 +268,12 @@ async def run_aider_in_e2b(
                 )
 
         # Run Aider
-        aider_model = model or "gpt-4o"
+        aider_model = model or "gpt-4o-mini"
         aider_cmd = (
             f"aider --model {aider_model} --message {shlex.quote(final_instructions)} "
             "--yes --exit --no-attribute-author --no-attribute-committer "
-            "--no-attribute-co-authored-by --no-auto-commits --no-gitignore"
+            "--no-attribute-co-authored-by --no-auto-commits "
+            "--no-restore-chat-history"
         )
 
         # Handle Thinking Mode (Claude 3.7 / Bedrock)
@@ -285,6 +298,15 @@ async def run_aider_in_e2b(
         env = _build_default_env()
         if region:
             env["AWS_REGION"] = region
+        if github_token:
+            env["GITHUB_TOKEN"] = github_token
+            env["GH_TOKEN"] = github_token
+        if openai_api_key:
+            env["OPENAI_API_KEY"] = openai_api_key
+        if aws_access_key_id:
+            env["AWS_ACCESS_KEY_ID"] = aws_access_key_id
+        if aws_secret_access_key:
+            env["AWS_SECRET_ACCESS_KEY"] = aws_secret_access_key
 
         @retry(
             stop=stop_after_attempt(3),

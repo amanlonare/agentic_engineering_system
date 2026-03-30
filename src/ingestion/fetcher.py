@@ -1,12 +1,15 @@
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from mcp.types import TextContent
 
 from src.core.config import settings
 from src.ingestion.exceptions import IngestionConnectionError
 from src.schemas.ingestion import IdentifiedSource, SourceType
+from src.utils.logger import configure_logging
+
+logger = configure_logging("source_fetcher")
 
 
 class SourceFetcher:
@@ -27,7 +30,12 @@ class SourceFetcher:
                 key_path = Path.cwd().joinpath(self.google_key_path)
             self.google_key_path = str(key_path)
 
-    async def fetch(self, identified_source: IdentifiedSource) -> Any:
+    async def fetch(
+        self,
+        identified_source: IdentifiedSource,
+        github_token: Optional[str] = None,
+        google_service_account_json: Optional[str] = None,
+    ) -> Any:
         """Fetches content based on the source type."""
 
         if identified_source.source_type == SourceType.PDF_FILE:
@@ -36,13 +44,19 @@ class SourceFetcher:
             return identified_source.identifier
 
         elif identified_source.source_type == SourceType.GOOGLE_DOC:
-            return await self._fetch_google_doc(identified_source.identifier)
+            return await self._fetch_google_doc(
+                identified_source.identifier, google_service_account_json
+            )
 
         elif identified_source.source_type == SourceType.GOOGLE_SHEET:
-            return await self._fetch_google_sheet(identified_source.identifier)
+            return await self._fetch_google_sheet(
+                identified_source.identifier, google_service_account_json
+            )
 
         elif identified_source.source_type == SourceType.GITHUB_REPO:
-            return await self._fetch_github_repo(identified_source.identifier)
+            return await self._fetch_github_repo(
+                identified_source.identifier, github_token
+            )
 
         elif identified_source.source_type == SourceType.SLACK_CONVERSATION:
             raise NotImplementedError("Slack fetching is not fully implemented yet.")
@@ -95,7 +109,9 @@ class SourceFetcher:
 
         return results
 
-    async def _fetch_github_repo(self, url: str) -> list:
+    async def _fetch_github_repo(
+        self, url: str, github_token: Optional[str] = None
+    ) -> list:
         """
         Fetches the repository file tree and downloads supported files using GitHub MCP.
         Returns a list of dicts: [{"path": str, "content": str, "url": str}]
@@ -116,7 +132,14 @@ class SourceFetcher:
         if "github" not in self.mcp_manager.sessions:
             cmd_str = str(settings.GITHUB_MCP_COMMAND)
             cmd_parts = cmd_str.split()
-            await self.mcp_manager.connect_stdio("github", cmd_parts[0], cmd_parts[1:])
+            env_overrides = {}
+            if github_token:
+                env_overrides["GITHUB_TOKEN"] = github_token
+                env_overrides["GITHUB_PERSONAL_ACCESS_TOKEN"] = github_token
+
+            await self.mcp_manager.connect_stdio(
+                "github", cmd_parts[0], cmd_parts[1:], env=env_overrides
+            )
 
         session = self.mcp_manager.sessions["github"]
 
@@ -212,24 +235,41 @@ class SourceFetcher:
             raise ValueError(f"Could not extract file ID from URL: {url}")
         return match.group(1)
 
-    def _get_google_creds(self, scopes: list):
+    def _get_google_creds(self, scopes: list, json_content: Optional[str] = None):
+        from google.oauth2 import service_account
+
+        # Priority 1: Direct JSON content from UI/Custom Mode
+        if json_content:
+            try:
+                import json as py_json
+
+                info = py_json.loads(json_content)
+                return service_account.Credentials.from_service_account_info(
+                    info, scopes=scopes
+                )
+            except Exception as e:
+                logger.error(f"Failed to load Google credentials from JSON: {e}")
+                # Fallback to standard flow if JSON parsing fails
+
+        # Priority 2: File path from settings/.env
         if not self.google_key_path or not Path(self.google_key_path).exists():
             raise ValueError(
                 f"Google Service Account key not found at {self.google_key_path}"
             )
 
-        from google.oauth2 import service_account
-
         return service_account.Credentials.from_service_account_file(
             self.google_key_path, scopes=scopes
         )
 
-    async def _fetch_google_doc(self, url: str) -> Dict[str, Any]:
+    async def _fetch_google_doc(
+        self, url: str, google_service_account_json: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Fetches the Google Doc JSON representation."""
 
         file_id = self._extract_google_file_id(url)
         creds = self._get_google_creds(
-            ["https://www.googleapis.com/auth/documents.readonly"]
+            ["https://www.googleapis.com/auth/documents.readonly"],
+            google_service_account_json,
         )
 
         try:
@@ -242,11 +282,14 @@ class SourceFetcher:
         except Exception as e:
             raise IngestionConnectionError(f"Failed to fetch Google Doc: {e}") from e
 
-    async def _fetch_google_sheet(self, url: str) -> Dict[str, Any]:
+    async def _fetch_google_sheet(
+        self, url: str, google_service_account_json: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Fetches the Google Sheet grid data JSON."""
         file_id = self._extract_google_file_id(url)
         creds = self._get_google_creds(
-            ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+            ["https://www.googleapis.com/auth/spreadsheets.readonly"],
+            google_service_account_json,
         )
 
         try:
