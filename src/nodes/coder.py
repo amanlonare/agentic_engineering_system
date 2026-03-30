@@ -26,15 +26,12 @@ async def _get_repo_url(repo_name: str) -> str:
     # Check for exact match OR clean suffix match (e.g. /repo_name)
     results = gs.execute_query(
         "MATCH (r:Repository) WHERE r.name = $name OR r.name ENDS WITH $suffix RETURN r.remote_url LIMIT 1",
-        {
-            "name": repo_name,
-            "suffix": f"/{repo_name.split('/')[-1]}"
-        },
+        {"name": repo_name, "suffix": f"/{repo_name.split('/')[-1]}"},
     )
     if results and results[0] and results[0][0]:
         return results[0][0]
 
-    # STALENESS PREVENTION: Do not guess Github URLs. 
+    # STALENESS PREVENTION: Do not guess Github URLs.
     # If the repo isn't in the GraphStore, the system shouldn't try a random URL.
     raise ValueError(
         f"Repository '{repo_name}' is not currently indexed in the GraphStore. "
@@ -84,7 +81,9 @@ async def coder_node(
         else "unknown"
     )
     repo_url = await _get_repo_url(repo_name)
-    logger.info("🎯 Implementation Target: %s in repository '%s'", current_step.id, repo_name)
+    logger.info(
+        "🎯 Implementation Target: %s in repository '%s'", current_step.id, repo_name
+    )
 
     # 2. Prepare Aider Instructions
     # Combine the step description with orchestrator feedback

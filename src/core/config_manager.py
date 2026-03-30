@@ -1,8 +1,8 @@
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import yaml
 import boto3
+import yaml
 from langchain_aws import ChatBedrockConverse
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.runnables import RunnableConfig
@@ -131,12 +131,15 @@ class ConfigManager:
         # 2. Resolve final Provider/Model
         provider = (
             override_provider
-            or (agent_cfg.provider if agent_cfg and agent_cfg.provider else llm_cfg.provider)
+            or (
+                agent_cfg.provider
+                if agent_cfg and agent_cfg.provider
+                else llm_cfg.provider
+            )
         ).lower()
 
-        model = (
-            override_model
-            or (agent_cfg.model if agent_cfg and agent_cfg.model else llm_cfg.default_model)
+        model = override_model or (
+            agent_cfg.model if agent_cfg and agent_cfg.model else llm_cfg.default_model
         )
 
         temp = (
@@ -166,7 +169,9 @@ class ConfigManager:
                 logger.info("🔑 Using session-specific AWS credentials for Bedrock.")
                 session = boto3.Session(
                     aws_access_key_id=override_aws_key,
-                    aws_secret_access_key=override_aws_secret.get_secret_value() if isinstance(override_aws_secret, SecretStr) else override_aws_secret,
+                    aws_secret_access_key=override_aws_secret.get_secret_value()
+                    if isinstance(override_aws_secret, SecretStr)
+                    else override_aws_secret,
                     region_name=region,
                 )
                 bedrock_kwargs["client"] = session.client("bedrock-runtime")

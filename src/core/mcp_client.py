@@ -1,4 +1,3 @@
-import json
 import logging
 import os
 import tempfile
@@ -76,12 +75,16 @@ class MCPClientManager:
                 try:
                     # Create a temporary file that exists only for this connection's duration
                     fd, path = tempfile.mkstemp(suffix=".json", prefix="aes_gdrive_")
-                    with os.fdopen(fd, 'w') as f:
+                    with os.fdopen(fd, "w") as f:
                         f.write(settings.GOOGLE_SERVICE_ACCOUNT_JSON)
                     key_path = Path(path)
-                    logger.info("🔑 Injected ephemeral Google Service Account JSON from memory.")
+                    logger.info(
+                        "🔑 Injected ephemeral Google Service Account JSON from memory."
+                    )
                 except Exception as e:
-                    logger.error(f"Failed to create temp file for Google credentials: {e}")
+                    logger.error(
+                        f"Failed to create temp file for Google credentials: {e}"
+                    )
 
             # Priority 2: Standard file path from .env
             elif settings.GOOGLE_SERVICE_ACCOUNT_JSON_PATH:

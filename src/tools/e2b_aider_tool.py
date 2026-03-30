@@ -153,7 +153,9 @@ async def run_command_in_e2b(
     Credentials (GITHUB_TOKEN, API keys) are injected by default.
     """
     try:
-        sb, base_repo_path = await get_sandbox(repo_url, sandbox_id, github_token=github_token)
+        sb, base_repo_path = await get_sandbox(
+            repo_url, sandbox_id, github_token=github_token
+        )
         repo_path = os.path.join(base_repo_path, cwd) if cwd else base_repo_path
 
         if cwd:
@@ -237,7 +239,9 @@ async def run_aider_in_e2b(
             "%s E2B sandbox %s (id: %s)...", action, log_mode, sandbox_id or "new"
         )
 
-        sb, repo_path = await get_sandbox(repo_url, sandbox_id, github_token=github_token)
+        sb, repo_path = await get_sandbox(
+            repo_url, sandbox_id, github_token=github_token
+        )
 
         # Setup Branch
         if branch:

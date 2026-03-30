@@ -1,5 +1,5 @@
-from asyncio import sleep, run
-from typing import Optional, List, Dict, Any
+from asyncio import run
+from typing import Optional
 
 from src.core.memory import LongTermMemory
 from src.utils.logger import configure_logging
@@ -160,12 +160,14 @@ class WorkspaceManager:
             # Query the count of all Source nodes
             q = "MATCH (n:Source) RETURN count(n) as total_count"
             results = self.graph_store.execute_query(q)
-            
+
             if results and int(results[0][0]) > 0:
                 count = int(results[0][0])
-                logger.info(f"✅ Organization context is already ingested (Found {count} Source nodes).")
+                logger.info(
+                    f"✅ Organization context is already ingested (Found {count} Source nodes)."
+                )
                 return True
-                
+
             logger.info("⚠️ Organization context is NOT ingested.")
             return False
         except Exception as e:
@@ -183,7 +185,9 @@ class WorkspaceManager:
         """
         from src.ingestion.pipeline import IngestionPipeline
 
-        logger.info("🚀 Starting real-time bulk ingestion of %d sources...", len(sources))
+        logger.info(
+            "🚀 Starting real-time bulk ingestion of %d sources...", len(sources)
+        )
         pipeline = IngestionPipeline()
 
         try:
@@ -195,12 +199,15 @@ class WorkspaceManager:
                     chunks = await pipeline.process(
                         url, github_token, google_service_account_json
                     )
-                    logger.info("✅ Successfully indexed %d chunks for %s", len(chunks), url)
+                    logger.info(
+                        "✅ Successfully indexed %d chunks for %s", len(chunks), url
+                    )
                 except Exception as e:
                     logger.error("❌ Failed to ingest %s: %s", url, e)
         finally:
             await pipeline.close()
             logger.info("✨ Bulk ingestion process completed.")
+
 
 if __name__ == "__main__":
     wm = WorkspaceManager()

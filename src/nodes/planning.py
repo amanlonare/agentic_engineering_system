@@ -223,7 +223,9 @@ async def planning_node(
 
             # Stream the plan to the UI console in real-time with clear separators
             separator = "=" * 80
-            logger.info(f"\n{separator}\n📋 TECHNICAL PLAN GENERATED\n{separator}\n{plan_md}\n{separator}\n")
+            logger.info(
+                f"\n{separator}\n📋 TECHNICAL PLAN GENERATED\n{separator}\n{plan_md}\n{separator}\n"
+            )
 
             content = (
                 f"### 📋 Technical Plan Generated\n"

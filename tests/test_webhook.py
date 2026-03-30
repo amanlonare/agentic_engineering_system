@@ -48,13 +48,14 @@ def test_health_check():
         "status": "ok",
         "service": "agentic-engineering-api",
         "workspace_ready": False,
+        "context_ingested": False,
     }
 
 
 def test_webhook_missing_signature():
     """Expect 403 when the signature header is missing."""
     payload = {"action": "opened"}
-    response = client.post("/webhooks/github", json=payload)
+    response = client.post("/api/webhooks/github", json=payload)
     assert response.status_code == 403
     assert response.json() == {"detail": "Invalid signature"}
 
@@ -63,7 +64,7 @@ def test_webhook_invalid_signature():
     """Expect 403 when the signature header is wrong."""
     payload = {"action": "opened"}
     headers = {"X-Hub-Signature-256": "sha256=invalid_hash_data"}
-    response = client.post("/webhooks/github", json=payload, headers=headers)
+    response = client.post("/api/webhooks/github", json=payload, headers=headers)
     assert response.status_code == 403
     assert response.json() == {"detail": "Invalid signature"}
 
@@ -76,7 +77,9 @@ def test_webhook_ignored_event():
     signature = f"sha256={hash_obj.hexdigest()}"
     headers = {"X-Hub-Signature-256": signature, "X-GitHub-Event": "push"}
 
-    response = client.post("/webhooks/github", content=payload_body, headers=headers)
+    response = client.post(
+        "/api/webhooks/github", content=payload_body, headers=headers
+    )
     assert response.status_code == 200
     assert response.json()["status"] == "ignored"
 
@@ -89,7 +92,9 @@ def test_webhook_ignored_action():
     signature = f"sha256={hash_obj.hexdigest()}"
     headers = {"X-Hub-Signature-256": signature, "X-GitHub-Event": "issues"}
 
-    response = client.post("/webhooks/github", content=payload_body, headers=headers)
+    response = client.post(
+        "/api/webhooks/github", content=payload_body, headers=headers
+    )
     assert response.status_code == 200
     assert response.json()["status"] == "ignored"
 
@@ -124,7 +129,9 @@ def test_webhook_valid_issue(mock_mcp_class):
         "Content-Type": "application/json",
     }
 
-    response = client.post("/webhooks/github", content=payload_body, headers=headers)
+    response = client.post(
+        "/api/webhooks/github", content=payload_body, headers=headers
+    )
 
     assert response.status_code == 200
     res_data = response.json()

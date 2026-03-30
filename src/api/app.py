@@ -1,15 +1,13 @@
-import asyncio
-import yaml
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, TypedDict
 
+import yaml
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.webhooks import router as webhooks_router
 from src.api.orchestration import router as orchestration_router
-from src.core.config import settings
+from src.api.webhooks import router as webhooks_router
 from src.core.workspace import WorkspaceManager
 from src.utils.logger import configure_logging
 
@@ -52,7 +50,7 @@ async def lifespan(app: FastAPI):
     # 2. Initialize WorkspaceManager (this loads embeddings if needed)
     logger.info("📂 Initializing WorkspaceManager...")
     workspace_manager = WorkspaceManager()
-    
+
     # 3. Automatic Context Ingestion (if missing)
     if not workspace_manager.is_ingested():
         sources_path = Path("ingestion_sources.yaml")
@@ -60,7 +58,7 @@ async def lifespan(app: FastAPI):
             try:
                 with open(sources_path, "r") as f:
                     config = yaml.safe_load(f)
-                    
+
                 sources = []
                 # Transform YAML formats to the flat source list expected by WorkspaceManager
                 for repo_url in config.get("repositories", []):
@@ -69,12 +67,19 @@ async def lifespan(app: FastAPI):
                     sources.append({"url": doc_url, "type": "doc"})
 
                 if sources:
-                    logger.info("🚀 Starting mandatory context ingestion of %d sources...", len(sources))
+                    logger.info(
+                        "🚀 Starting mandatory context ingestion of %d sources...",
+                        len(sources),
+                    )
                     await workspace_manager.bulk_ingest(sources)
-                    logger.info("✅ Initial context ingestion complete. Application is now starting up.")
+                    logger.info(
+                        "✅ Initial context ingestion complete. Application is now starting up."
+                    )
             except Exception as e:
-                logger.error("Failed to read ingestion_sources.yaml for auto-ingestion: %s", e)
-    
+                logger.error(
+                    "Failed to read ingestion_sources.yaml for auto-ingestion: %s", e
+                )
+
     # Attach to app state so dependencies can find it
     app.state.workspace_manager = workspace_manager
 
@@ -104,7 +109,9 @@ def create_app() -> FastAPI:
 
     # Register Routers
     app.include_router(webhooks_router, prefix="/api/webhooks", tags=["Webhooks"])
-    app.include_router(orchestration_router, prefix="/api/orchestration", tags=["Orchestration"])
+    app.include_router(
+        orchestration_router, prefix="/api/orchestration", tags=["Orchestration"]
+    )
 
     @app.get("/health", tags=["System"])
     async def health_check(request: Request):
@@ -112,7 +119,7 @@ def create_app() -> FastAPI:
         workspace_manager = getattr(request.app.state, "workspace_manager", None)
         workspace_ready = workspace_manager is not None
         context_ingested = workspace_manager.is_ingested() if workspace_ready else False
-        
+
         return {
             "status": "ok",
             "service": "agentic-engineering-api",

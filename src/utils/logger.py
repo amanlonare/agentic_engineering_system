@@ -2,11 +2,12 @@ import asyncio
 import logging
 import sys
 from contextvars import ContextVar
-from typing import List, Optional
-
+from typing import Optional
 
 # Global ContextVar to store logs for the current request context (thread-safe for async)
-ui_log_queue: ContextVar[Optional[asyncio.Queue]] = ContextVar("ui_log_queue", default=None)
+ui_log_queue: ContextVar[Optional[asyncio.Queue]] = ContextVar(
+    "ui_log_queue", default=None
+)
 
 
 class ColoredFormatter(logging.Formatter):
